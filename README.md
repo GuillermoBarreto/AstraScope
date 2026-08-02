@@ -1,5 +1,7 @@
 # OrbitWatch
 
+![OrbitWatch: Earth with satellite orbital paths](docs/images/orbitwatch-hero.png)
+
 OrbitWatch is a modern portfolio project for exploring Earth and satellite systems in a 3D web experience.
 
 ## Current milestone
