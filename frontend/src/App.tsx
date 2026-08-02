@@ -6,7 +6,11 @@ function HomePage() {
   const [status, setStatus] = useState('Checking backend…');
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/health')
+    const healthUrl = import.meta.env.VITE_API_BASE_URL
+      ? `${import.meta.env.VITE_API_BASE_URL}/health`
+      : '/api/health';
+
+    fetch(healthUrl)
       .then((response) => response.json())
       .then((payload) => setStatus(payload.status === 'ok' ? 'Backend online' : 'Backend unavailable'))
       .catch(() => setStatus('Backend unavailable'));
