@@ -4,6 +4,19 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Three.js is intentionally isolated; its 174 kB gzipped runtime exceeds Vite's
+    // generic default, while the application entry remains below 20 kB.
+    chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'three-core': ['three'],
+          'three-react': ['@react-three/fiber', '@react-three/drei'],
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
