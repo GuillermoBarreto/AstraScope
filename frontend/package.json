@@ -1,0 +1,46 @@
+{
+  "name": "orbitwatch-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext ts,tsx --max-warnings=0",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.2.0",
+    "@react-three/fiber": "^8.17.10",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "axios": "^1.7.19",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.21.0",
+    "three": "^0.162.0",
+    "zustand": "^5.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "@testing-library/jest-dom": "^6.9.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.14.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.0",
+    "jsdom": "^26.0.0",
+    "postcss": "^8.4.49",
+    "prettier": "^3.9.6",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.9"
+  }
+}
