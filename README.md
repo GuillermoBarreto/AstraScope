@@ -47,7 +47,7 @@ If dependencies were installed before the satellite catalog was added, run the `
 
 The API health endpoint is available at http://localhost:8000/health and the catalog at http://localhost:8000/api/satellites.
 
-The full active catalog is cached in memory and on disk for two hours to comply with CelesTrak's one-download-per-update policy. If CelesTrak is temporarily unavailable, the last successful catalog remains available. Orbital positions are visual estimates and must not be used for navigation or conjunction assessment.
+The full active catalog is cached in memory and on disk for two hours to comply with CelesTrak's one-download-per-update policy. If CelesTrak is unavailable before the first cache fill, OrbitWatch falls back to the open SatNOGS orbital catalog; after a successful sync, the last catalog also remains available offline. Orbital positions are visual estimates and must not be used for navigation or conjunction assessment.
 
 ## Environment variables
 

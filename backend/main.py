@@ -29,6 +29,7 @@ app.add_middleware(
 )
 
 CELESTRAK_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json"
+SATNOGS_URL = "https://db.satnogs.org/api/tle/?format=json"
 CACHE_FILE = Path(__file__).resolve().parent / ".cache" / "active-satellites.json"
 CACHE_SECONDS = 2 * 60 * 60
 last_failure_at = 0.0
@@ -90,6 +91,49 @@ def normalize(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def tle_epoch(value: str) -> str:
+    year = int(value[:2])
+    full_year = 2000 + year if year < 57 else 1900 + year
+    day = float(value[2:])
+    start = datetime(full_year, 1, 1, tzinfo=timezone.utc)
+    return datetime.fromtimestamp(start.timestamp() + (day - 1) * 86400, timezone.utc).isoformat()
+
+
+def tle_object_id(value: str) -> str:
+    compact = value.strip()
+    if len(compact) < 5:
+        return compact or "unknown"
+    year = int(compact[:2])
+    full_year = 2000 + year if year < 57 else 1900 + year
+    return f"{full_year}-{compact[2:5]}{compact[5:]}"
+
+
+def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
+    line1 = str(entry.get("tle1", ""))
+    line2 = str(entry.get("tle2", ""))
+    if len(line1) < 32 or len(line2) < 63:
+        raise ValueError("Invalid SatNOGS TLE record")
+    name = str(entry.get("tle0", "Unknown satellite")).removeprefix("0 ").strip()
+    norad_id = int(entry.get("norad_cat_id") or line1[2:7])
+    mean_motion = float(line2[52:63])
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "satellite"
+    return {
+        "id": f"{slug}-{norad_id}",
+        "name": name,
+        "noradId": norad_id,
+        "objectId": tle_object_id(line1[9:17]),
+        "epoch": tle_epoch(line1[18:32]),
+        "inclination": float(line2[8:16]),
+        "raan": float(line2[17:25]),
+        "eccentricity": float(f"0.{line2[26:33].strip()}"),
+        "argPericenter": float(line2[34:42]),
+        "meanAnomaly": float(line2[43:51]),
+        "meanMotion": mean_motion,
+        "operator": identify_operator(name),
+        "orbit": orbit_class(mean_motion),
+    }
+
+
 def read_disk_cache() -> tuple[list[dict[str, Any]], str] | None:
     try:
         cached = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
@@ -122,6 +166,30 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     if not isinstance(payload, list):
         return [], datetime.now(timezone.utc).isoformat()
     satellites = [normalize(item) for item in payload if isinstance(item, dict)]
+    updated_at = datetime.now(timezone.utc).isoformat()
+    write_disk_cache(satellites, updated_at)
+    return satellites, updated_at
+
+
+@lru_cache(maxsize=1)
+def fetch_satnogs_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
+    del cache_window
+    request = Request(SATNOGS_URL, headers={"User-Agent": "OrbitWatch/0.3", "Accept": "application/json"})
+    tls_context = ssl.create_default_context(cafile=certifi.where())
+    with urlopen(request, timeout=45, context=tls_context) as response:
+        payload = json.load(response)
+    if not isinstance(payload, list):
+        raise ValueError("SatNOGS returned an invalid catalog")
+    satellites = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        try:
+            satellites.append(normalize_satnogs(item))
+        except (ValueError, TypeError):
+            continue
+    if not satellites:
+        raise ValueError("SatNOGS returned no valid orbital records")
     updated_at = datetime.now(timezone.utc).isoformat()
     write_disk_cache(satellites, updated_at)
     return satellites, updated_at
@@ -172,9 +240,15 @@ def list_satellites(
             satellites, updated_at = cached
             source = "stale-cache"
         else:
-            satellites = []
-            updated_at = datetime.now(timezone.utc).isoformat()
-            source = "unavailable"
+            try:
+                satellites, updated_at = fetch_satnogs_catalog(cache_window)
+                source = "satnogs"
+                error = None
+            except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as fallback_exc:
+                satellites = []
+                updated_at = datetime.now(timezone.utc).isoformat()
+                source = "unavailable"
+                error = f"CelesTrak: {error}; SatNOGS: {type(fallback_exc).__name__}: {fallback_exc}"
 
     if operator and operator.lower() != "all":
         satellites = [item for item in satellites if item["operator"].lower() == operator.lower()]
