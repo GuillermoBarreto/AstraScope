@@ -21,4 +21,5 @@ export type SatelliteResponse = {
   total: number;
   updatedAt: string;
   source: 'celestrak' | 'unavailable';
+  error?: string | null;
 };

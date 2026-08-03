@@ -1,11 +1,13 @@
 import json
 import re
+import ssl
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
+import certifi
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -86,7 +88,8 @@ def normalize(entry: dict[str, Any]) -> dict[str, Any]:
 def fetch_catalog(cache_hour: str) -> tuple[list[dict[str, Any]], str]:
     del cache_hour
     request = Request(CELESTRAK_URL, headers={"User-Agent": "OrbitWatch/0.2"})
-    with urlopen(request, timeout=30) as response:
+    tls_context = ssl.create_default_context(cafile=certifi.where())
+    with urlopen(request, timeout=30, context=tls_context) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
         return [], datetime.now(timezone.utc).isoformat()
@@ -101,13 +104,15 @@ def list_satellites(
     search: str | None = Query(default=None, max_length=80),
 ) -> dict[str, Any]:
     source = "celestrak"
+    error = None
     try:
         cache_hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
         satellites, updated_at = fetch_catalog(cache_hour)
-    except (URLError, TimeoutError, json.JSONDecodeError, ValueError):
+    except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         satellites = []
         updated_at = datetime.now(timezone.utc).isoformat()
         source = "unavailable"
+        error = f"{type(exc).__name__}: {exc}"
 
     if operator and operator.lower() != "all":
         satellites = [item for item in satellites if item["operator"].lower() == operator.lower()]
@@ -125,4 +130,5 @@ def list_satellites(
         "total": len(satellites),
         "updatedAt": updated_at,
         "source": source,
+        "error": error,
     }

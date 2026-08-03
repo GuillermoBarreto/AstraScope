@@ -43,6 +43,8 @@ pip install -r backend/requirements.txt
 python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+If dependencies were installed before the satellite catalog was added, run the `pip install` command again so the backend has the trusted CA bundle used for CelesTrak HTTPS requests.
+
 The API health endpoint is available at http://localhost:8000/health and the catalog at http://localhost:8000/api/satellites.
 
 The full active catalog is cached in-process for one hour to respect the upstream data service. Orbital positions are visual estimates and must not be used for navigation or conjunction assessment.
