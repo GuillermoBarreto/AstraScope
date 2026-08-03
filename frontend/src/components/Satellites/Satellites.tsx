@@ -1,101 +1,57 @@
-import { useFrame } from '@react-three/fiber';
+import { ThreeEvent, useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
-
-type SatelliteMarker = {
-  id: string;
-  name: string;
-  inclination: number;
-  longitude: number;
-};
+import type { Satellite } from '@/types/satellite';
+import { satellitePosition } from '@/utils/orbit';
 
 type SatellitesProps = {
-  satellites?: SatelliteMarker[];
-  radius?: number;
+  satellites: Satellite[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
 };
 
-type SatelliteOrbit = {
-  id: string;
-  name: string;
-  orbitRadius: number;
-  orbitSpeed: number;
-  phaseOffset: number;
-  color: string;
-};
+const dummy = new THREE.Object3D();
 
-const DEFAULT_SATELLITES: SatelliteMarker[] = [
-  { id: 'iss', name: 'ISS', inclination: 51.6, longitude: 0 },
-  { id: 'hubble', name: 'Hubble', inclination: 28.5, longitude: 45 },
-  { id: 'starlink', name: 'Starlink', inclination: 53, longitude: -120 },
-  { id: 'gps', name: 'GPS', inclination: 55, longitude: 90 },
-];
+export function Satellites({ satellites, selectedId, onSelect }: SatellitesProps) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const positions = useMemo(() => satellites.slice(0, 3000), [satellites]);
+  const selectedIndex = positions.findIndex((satellite) => satellite.id === selectedId);
 
-const ORBIT_LINE_POINTS = 64;
-const ORBIT_BOB = 0.05;
-
-function buildOrbitLine(radius: number) {
-  const points: THREE.Vector3[] = [];
-
-  for (let index = 0; index <= ORBIT_LINE_POINTS; index += 1) {
-    const angle = (index / ORBIT_LINE_POINTS) * Math.PI * 2;
-    points.push(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
-  }
-
-  return new THREE.BufferGeometry().setFromPoints(points);
-}
-
-export function Satellites({ satellites = DEFAULT_SATELLITES, radius = 1.35 }: SatellitesProps) {
-  const orbitalData = useMemo(() => {
-    return satellites.map((satellite, index) => ({
-      id: satellite.id,
-      name: satellite.name,
-      orbitRadius: radius + 0.12 + index * 0.025,
-      orbitSpeed: 0.8 + index * 0.12,
-      phaseOffset: (index / satellites.length) * Math.PI * 2,
-      color: index % 2 === 0 ? '#f59e0b' : '#38bdf8',
-    } satisfies SatelliteOrbit));
-  }, [radius, satellites]);
-
-  return (
-    <group>
-      {orbitalData.map((satellite) => (
-        <OrbitingSatellite key={satellite.id} satellite={satellite} />
-      ))}
-    </group>
-  );
-}
-
-type OrbitingSatelliteProps = {
-  satellite: SatelliteOrbit;
-};
-
-function OrbitingSatellite({ satellite }: OrbitingSatelliteProps) {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  useFrame(({ clock }) => {
-    if (!meshRef.current) return;
-
-    const elapsed = clock.getElapsedTime();
-    const angle = elapsed * satellite.orbitSpeed + satellite.phaseOffset;
-    const orbitOffset = Math.sin(elapsed * 0.7 + satellite.phaseOffset) * ORBIT_BOB;
-
-    meshRef.current.position.set(
-      Math.cos(angle) * satellite.orbitRadius,
-      orbitOffset,
-      Math.sin(angle) * satellite.orbitRadius * 0.7,
-    );
+  useFrame(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const now = new Date();
+    positions.forEach((satellite, index) => {
+      const [x, y, z] = satellitePosition(satellite, now);
+      dummy.position.set(x, y, z);
+      const selected = index === selectedIndex;
+      dummy.scale.setScalar(selected ? 2.8 : 1);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+      mesh.setColorAt(index, new THREE.Color(selected ? '#fbbf24' : operatorColor(satellite.operator)));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   });
 
+  const handleClick = (event: ThreeEvent<MouseEvent>) => {
+    event.stopPropagation();
+    if (event.instanceId !== undefined) onSelect(positions[event.instanceId].id);
+  };
+
   return (
-    <group>
-      <line>
-        <bufferGeometry attach="geometry" {...buildOrbitLine(satellite.orbitRadius)} />
-        <lineBasicMaterial attach="material" color="#334155" transparent opacity={0.35} />
-      </line>
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[0.035, 16, 16]} />
-        <meshBasicMaterial color={satellite.color} />
-      </mesh>
-    </group>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, positions.length]} onClick={handleClick}>
+      <sphereGeometry args={[0.014, 6, 6]} />
+      <meshBasicMaterial toneMapped={false} />
+    </instancedMesh>
   );
+}
+
+function operatorColor(operator: string) {
+  if (operator === 'SpaceX') return '#67e8f9';
+  if (operator === 'Eutelsat OneWeb') return '#a78bfa';
+  if (operator === 'Amazon') return '#fb923c';
+  if (operator === 'Planet') return '#4ade80';
+  if (operator === 'NASA') return '#f87171';
+  return '#94a3b8';
 }
