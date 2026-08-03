@@ -1,16 +1,19 @@
 # OrbitWatch
 
+![OrbitWatch: Earth with satellite orbital paths](docs/images/orbitwatch-hero.png)
+
 OrbitWatch is a modern portfolio project for exploring Earth and satellite systems in a 3D web experience.
 
-## Current milestone
+## Current features
 
-This repository now contains the foundation for a scalable monorepo with:
+OrbitWatch now includes:
 
-- a Vite + React + TypeScript frontend
-- a FastAPI backend with CORS and a health endpoint
-- TailwindCSS styling support
-- React Three Fiber and Drei installed for future 3D work
-- strict TypeScript configuration and path aliases
+- a live public catalog of 10,000+ active spacecraft sourced from CelesTrak
+- current-position orbital propagation from GP/OMM elements
+- an interactive, GPU-instanced 3D Earth view supporting thousands of markers
+- search by satellite name or NORAD ID
+- operator and orbit-class filters for SpaceX, OneWeb, Amazon, Planet, NASA, and more
+- satellite inspection with altitude, inclination, epoch, and catalog metadata
 
 ## Repository structure
 
@@ -40,7 +43,9 @@ pip install -r backend/requirements.txt
 python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API health endpoint is available at http://localhost:8000/health.
+The API health endpoint is available at http://localhost:8000/health and the catalog at http://localhost:8000/api/satellites.
+
+The full active catalog is cached in-process for one hour to respect the upstream data service. Orbital positions are visual estimates and must not be used for navigation or conjunction assessment.
 
 ## Environment variables
 

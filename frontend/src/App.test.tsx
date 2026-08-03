@@ -9,6 +9,8 @@ vi.mock('@/components/Scene/Scene', () => ({
 
 describe('App', () => {
   it('renders the OrbitWatch globe experience', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
+
     render(
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <App />
@@ -16,6 +18,6 @@ describe('App', () => {
     );
 
     expect(screen.getByText('OrbitWatch')).toBeInTheDocument();
-    expect(screen.getByText(/A living view of Earth/i)).toBeInTheDocument();
+    expect(screen.getByText(/Earth’s orbital neighborhood, live/i)).toBeInTheDocument();
   });
 });
