@@ -27,7 +27,7 @@ function HomePage() {
       .then((payload) => {
         setCatalog(payload.satellites);
         setUpdatedAt(payload.updatedAt);
-        setStatus(payload.source === 'celestrak' ? 'live' : 'offline');
+        setStatus(payload.source === 'unavailable' ? 'offline' : 'live');
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return;

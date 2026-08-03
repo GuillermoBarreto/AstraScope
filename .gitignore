@@ -10,6 +10,7 @@ env/
 frontend/dist/
 frontend/.vite/
 backend/.pytest_cache/
+backend/.cache/
 
 # Environment files
 .env

@@ -20,6 +20,6 @@ export type SatelliteResponse = {
   satellites: Satellite[];
   total: number;
   updatedAt: string;
-  source: 'celestrak' | 'unavailable';
+  source: 'celestrak' | 'cache' | 'stale-cache' | 'unavailable';
   error?: string | null;
 };

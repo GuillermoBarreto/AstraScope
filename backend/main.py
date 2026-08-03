@@ -1,10 +1,12 @@
 import json
 import re
 import ssl
+import time
 from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import certifi
@@ -27,6 +29,10 @@ app.add_middleware(
 )
 
 CELESTRAK_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json"
+CACHE_FILE = Path(__file__).resolve().parent / ".cache" / "active-satellites.json"
+CACHE_SECONDS = 2 * 60 * 60
+last_failure_at = 0.0
+last_failure_error: str | None = None
 
 
 @app.get("/health")
@@ -84,16 +90,41 @@ def normalize(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def read_disk_cache() -> tuple[list[dict[str, Any]], str] | None:
+    try:
+        cached = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        satellites = cached.get("satellites")
+        updated_at = cached.get("updatedAt")
+        if isinstance(satellites, list) and isinstance(updated_at, str):
+            return satellites, updated_at
+    except (OSError, json.JSONDecodeError, AttributeError):
+        pass
+    return None
+
+
+def write_disk_cache(satellites: list[dict[str, Any]], updated_at: str) -> None:
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary = CACHE_FILE.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps({"satellites": satellites, "updatedAt": updated_at}),
+        encoding="utf-8",
+    )
+    temporary.replace(CACHE_FILE)
+
+
 @lru_cache(maxsize=1)
-def fetch_catalog(cache_hour: str) -> tuple[list[dict[str, Any]], str]:
-    del cache_hour
+def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
+    del cache_window
     request = Request(CELESTRAK_URL, headers={"User-Agent": "OrbitWatch/0.2"})
     tls_context = ssl.create_default_context(cafile=certifi.where())
     with urlopen(request, timeout=30, context=tls_context) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
         return [], datetime.now(timezone.utc).isoformat()
-    return [normalize(item) for item in payload if isinstance(item, dict)], datetime.now(timezone.utc).isoformat()
+    satellites = [normalize(item) for item in payload if isinstance(item, dict)]
+    updated_at = datetime.now(timezone.utc).isoformat()
+    write_disk_cache(satellites, updated_at)
+    return satellites, updated_at
 
 
 @app.get("/satellites")
@@ -103,16 +134,47 @@ def list_satellites(
     orbit: str | None = Query(default=None),
     search: str | None = Query(default=None, max_length=80),
 ) -> dict[str, Any]:
+    global last_failure_at, last_failure_error
     source = "celestrak"
     error = None
+    cached = read_disk_cache()
     try:
-        cache_hour = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
-        satellites, updated_at = fetch_catalog(cache_hour)
+        cache_window = int(datetime.now(timezone.utc).timestamp() // CACHE_SECONDS)
+        if cached:
+            cache_age = datetime.now(timezone.utc) - datetime.fromisoformat(cached[1])
+        else:
+            cache_age = None
+        if cached and cache_age and cache_age.total_seconds() < CACHE_SECONDS:
+            satellites, updated_at = cached
+            source = "cache"
+        elif time.time() - last_failure_at < CACHE_SECONDS:
+            error = last_failure_error
+            if cached:
+                satellites, updated_at = cached
+                source = "stale-cache"
+            else:
+                satellites = []
+                updated_at = datetime.now(timezone.utc).isoformat()
+                source = "unavailable"
+        else:
+            satellites, updated_at = fetch_catalog(cache_window)
     except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
-        satellites = []
-        updated_at = datetime.now(timezone.utc).isoformat()
-        source = "unavailable"
-        error = f"{type(exc).__name__}: {exc}"
+        detail = ""
+        if isinstance(exc, HTTPError):
+            try:
+                detail = exc.read().decode("utf-8", errors="replace").strip()
+            except OSError:
+                pass
+        error = f"{type(exc).__name__}: {exc}{f' — {detail}' if detail else ''}"
+        last_failure_at = time.time()
+        last_failure_error = error
+        if cached:
+            satellites, updated_at = cached
+            source = "stale-cache"
+        else:
+            satellites = []
+            updated_at = datetime.now(timezone.utc).isoformat()
+            source = "unavailable"
 
     if operator and operator.lower() != "all":
         satellites = [item for item in satellites if item["operator"].lower() == operator.lower()]
