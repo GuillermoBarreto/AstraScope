@@ -17,7 +17,7 @@ OrbitWatch is an interactive 3D satellite explorer built with React, Three.js, a
 - saved or device-based observer location
 - upcoming 24-hour pass predictions above 10° elevation
 - responsive desktop and mobile interface
-- containerized production deployment
+- split Vercel frontend and Render API deployment configuration
 
 Orbital predictions are intended for education and visualization—not navigation, conjunction assessment, or operational decisions.
 
@@ -51,22 +51,48 @@ npm --prefix frontend test -- --run
 python -m pytest backend/tests -q
 ```
 
-## Production deployment
+## Deployment
 
-The included `Dockerfile` builds the Vite frontend and serves it with FastAPI from one container. `render.yaml` defines a free Render web service with CI-gated automatic deployment and a health check.
+### Frontend — Vercel
 
-[Deploy OrbitWatch to Render](https://render.com/deploy?repo=https://github.com/GuillermoBarreto/orbiwatch)
+Import `GuillermoBarreto/orbiwatch` into Vercel with these settings:
 
-The Render dashboard will ask you to connect GitHub and approve creation of the `orbitwatch` web service. No API keys are required. Once deployed, the frontend and API use the same origin, avoiding CORS and environment-variable setup.
+- Provider: Vercel
+- Root directory: `frontend`
+- Framework preset: Vite
+- Build command: `npm run build`
+- Output directory: `dist`
+- Install command: `npm install`
+- Required environment variable: `VITE_API_BASE_URL`
 
-You can also run the production container locally:
+Set `VITE_API_BASE_URL` to the public Render service URL without a trailing slash, for example `https://orbiwatch-api.onrender.com`. Vite embeds `VITE_` variables in the client bundle, so never store secrets or API keys in them.
 
-```powershell
-docker build -t orbitwatch .
-docker run --rm -p 8000:8000 orbitwatch
+### Backend — Render
+
+The root `render.yaml` defines the API service. The equivalent manual settings are:
+
+- Provider: Render
+- Service type: Web Service
+- Runtime: Python
+- Root directory: `backend`
+- Build command: `pip install -r requirements.txt`
+- Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- Health check path: `/health`
+
+Required Render environment variables:
+
+```text
+APP_ENV=production
+CORS_ORIGINS=https://orbiwatch.vercel.app
 ```
 
-Then open http://127.0.0.1:8000.
+Replace the example Vercel URL with the production domain assigned to the frontend. `CORS_ORIGINS` accepts comma-separated origins, so a future custom domain can be added without code changes:
+
+```text
+CORS_ORIGINS=https://orbiwatch.vercel.app,https://www.guillermobarreto.dev
+```
+
+Deploy the Render backend first, copy its public URL into Vercel as `VITE_API_BASE_URL`, and then deploy the frontend. No final deployment URL is hardcoded in source.
 
 ## Data architecture
 
@@ -75,7 +101,7 @@ OrbitWatch prefers CelesTrak's active OMM catalog and complies with its one-down
 ## Repository structure
 
 - `frontend/`: React, TypeScript, TailwindCSS, React Three Fiber, and satellite.js
-- `backend/`: FastAPI catalog aggregation, normalization, caching, and static serving
+- `backend/`: FastAPI catalog aggregation, normalization, caching, and CORS configuration
 - `backend/tests/`: catalog normalization and classification tests
 - `docs/`: project imagery and architecture notes
-- `render.yaml` and `Dockerfile`: production deployment
+- `render.yaml`: Render backend deployment configuration

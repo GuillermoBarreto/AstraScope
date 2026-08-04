@@ -14,6 +14,8 @@ backend/.pytest_cache/
 backend/.cache/
 
 # Environment files
+frontend/.env
+frontend/.env.local
 .env
 .env.*
 !.env.example

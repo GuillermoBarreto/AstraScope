@@ -9,11 +9,10 @@ import {
   jday,
   json2satrec,
   propagate,
-  shadowFraction,
   sunPos,
   twoline2satrec,
   type SatRec,
-} from '@/vendor/satellite';
+} from 'satellite.js';
 import type { Observer, Satellite, SatellitePass } from '@/types/satellite';
 
 export const EARTH_RADIUS_KM = 6378.137;
@@ -132,8 +131,9 @@ export function predictPasses(satellite: Satellite, observer: Observer, start: D
         current.maxElevation = elevation;
         current.rangeKm = look.rangeSat;
         const sun = sunPos(jday(date));
-        const sunLook = ecfToLookAngles(observerGd, eciToEcf(sun.rsun, result.gmst));
-        current.visible = shadowFraction(sun.rsun, result.positionEci) > 0.1 && sunLook.elevation < degreesToRadians(-6);
+        const sunEci = { x: sun.rsun[0], y: sun.rsun[1], z: sun.rsun[2] };
+        const sunLook = ecfToLookAngles(observerGd, eciToEcf(sunEci, result.gmst));
+        current.visible = isSunlit(result.positionEci, sunEci) && sunLook.elevation < degreesToRadians(-6);
       }
     } else if (current) {
       passes.push(current);
@@ -143,4 +143,17 @@ export function predictPasses(satellite: Satellite, observer: Observer, start: D
   }
   if (current && passes.length < 3) passes.push(current);
   return passes;
+}
+
+function isSunlit(satellite: { x: number; y: number; z: number }, sun: { x: number; y: number; z: number }) {
+  const sunMagnitude = Math.hypot(sun.x, sun.y, sun.z);
+  const unitSun = { x: sun.x / sunMagnitude, y: sun.y / sunMagnitude, z: sun.z / sunMagnitude };
+  const alongSun = satellite.x * unitSun.x + satellite.y * unitSun.y + satellite.z * unitSun.z;
+  if (alongSun >= 0) return true;
+  const perpendicularDistance = Math.hypot(
+    satellite.x - alongSun * unitSun.x,
+    satellite.y - alongSun * unitSun.y,
+    satellite.z - alongSun * unitSun.z,
+  );
+  return perpendicularDistance > EARTH_RADIUS_KM;
 }

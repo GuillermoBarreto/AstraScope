@@ -1,8 +1,10 @@
 services:
   - type: web
-    name: orbitwatch
-    runtime: docker
+    name: orbiwatch-api
+    runtime: python
+    rootDir: backend
     plan: free
-    dockerfilePath: ./Dockerfile
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     autoDeployTrigger: checksPass
-    healthCheckPath: /api/health

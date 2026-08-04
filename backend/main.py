@@ -13,7 +13,6 @@ import certifi
 import truststore
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 try:
     from app.core.config import settings
@@ -50,6 +49,11 @@ def tls_context() -> ssl.SSLContext:
 @app.get("/api/health")
 def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "orbitwatch-backend", "environment": settings.app_env}
+
+
+@app.get("/")
+def api_root() -> dict[str, str]:
+    return {"service": "OrbiWatch API", "status": "online", "docs": "/docs"}
 
 
 def identify_operator(name: str) -> str:
@@ -317,8 +321,3 @@ def list_satellites(
         "source": source,
         "error": error,
     }
-
-
-FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
-if FRONTEND_DIST.exists():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")

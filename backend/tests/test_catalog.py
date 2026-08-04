@@ -1,4 +1,5 @@
-from backend.main import identify_operator, identify_purpose, normalize_satnogs, orbit_class
+from backend.main import api_root, identify_operator, identify_purpose, normalize_satnogs, orbit_class
+from backend.app.core.config import Settings
 
 
 ISS = {
@@ -24,3 +25,15 @@ def test_catalog_classification() -> None:
     assert orbit_class(15.5) == "LEO"
     assert orbit_class(2.0) == "MEO"
     assert orbit_class(1.0) == "GEO"
+
+
+def test_api_root_identifies_service() -> None:
+    assert api_root() == {"service": "OrbiWatch API", "status": "online", "docs": "/docs"}
+
+
+def test_cors_origins_are_comma_separated() -> None:
+    settings = Settings(cors_origins="https://orbiwatch.vercel.app, https://www.guillermobarreto.dev")
+    assert settings.cors_origins_list() == [
+        "https://orbiwatch.vercel.app",
+        "https://www.guillermobarreto.dev",
+    ]

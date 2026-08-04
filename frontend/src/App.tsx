@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Scene } from '@/components/Scene/Scene';
 import type { Observer, Satellite, SatelliteResponse } from '@/types/satellite';
+import { apiUrl } from '@/utils/api';
 import { altitudeKm, predictPasses, satelliteGeodetic } from '@/utils/orbit';
 
-const API_URL = import.meta.env.VITE_API_URL ?? '';
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
 const SPEEDS = [0, 1, 10, 60, 600];
 
@@ -23,10 +23,14 @@ function HomePage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${API_URL}/api/satellites`, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error('Catalog request failed');
-        return response.json() as Promise<SatelliteResponse>;
+    Promise.all([
+      fetch(apiUrl('/health'), { signal: controller.signal }),
+      fetch(apiUrl('/satellites'), { signal: controller.signal }),
+    ])
+      .then(([healthResponse, satellitesResponse]) => {
+        if (!healthResponse.ok) throw new Error('Health request failed');
+        if (!satellitesResponse.ok) throw new Error('Catalog request failed');
+        return satellitesResponse.json() as Promise<SatelliteResponse>;
       })
       .then((payload) => {
         setCatalog(payload.satellites);
