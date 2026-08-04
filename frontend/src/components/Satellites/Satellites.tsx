@@ -1,5 +1,5 @@
-import { ThreeEvent, useFrame } from '@react-three/fiber';
-import { useMemo, useRef } from 'react';
+import { ThreeEvent } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { Satellite } from '@/types/satellite';
 import { satellitePosition } from '@/utils/orbit';
@@ -8,21 +8,21 @@ type SatellitesProps = {
   satellites: Satellite[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  time: Date;
 };
 
 const dummy = new THREE.Object3D();
 
-export function Satellites({ satellites, selectedId, onSelect }: SatellitesProps) {
+export function Satellites({ satellites, selectedId, onSelect, time }: SatellitesProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const positions = useMemo(() => satellites.slice(0, 3000), [satellites]);
   const selectedIndex = positions.findIndex((satellite) => satellite.id === selectedId);
 
-  useFrame(() => {
+  useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
-    const now = new Date();
     positions.forEach((satellite, index) => {
-      const [x, y, z] = satellitePosition(satellite, now);
+      const [x, y, z] = satellitePosition(satellite, time);
       dummy.position.set(x, y, z);
       const selected = index === selectedIndex;
       dummy.scale.setScalar(selected ? 2.8 : 1);
@@ -32,7 +32,7 @@ export function Satellites({ satellites, selectedId, onSelect }: SatellitesProps
     });
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  });
+  }, [positions, selectedIndex, time]);
 
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();

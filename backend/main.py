@@ -10,8 +10,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import certifi
+import truststore
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 try:
     from app.core.config import settings
@@ -32,8 +34,16 @@ CELESTRAK_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT
 SATNOGS_URL = "https://db.satnogs.org/api/tle/?format=json"
 CACHE_FILE = Path(__file__).resolve().parent / ".cache" / "active-satellites.json"
 CACHE_SECONDS = 2 * 60 * 60
+CACHE_SCHEMA_VERSION = 2
 last_failure_at = 0.0
 last_failure_error: str | None = None
+
+
+def tls_context() -> ssl.SSLContext:
+    try:
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except (ImportError, NotImplementedError):
+        return ssl.create_default_context(cafile=certifi.where())
 
 
 @app.get("/health")
@@ -44,6 +54,8 @@ def health_check() -> dict[str, str]:
 
 def identify_operator(name: str) -> str:
     upper = name.upper()
+    if upper in {"ISS", "ISS (ZARYA)", "HST", "TERRA", "AQUA"}:
+        return "NASA"
     patterns = (
         ("SpaceX", ("STARLINK",)),
         ("Eutelsat OneWeb", ("ONEWEB",)),
@@ -54,7 +66,14 @@ def identify_operator(name: str) -> str:
         ("Globalstar", ("GLOBALSTAR",)),
         ("SES", ("O3B", "SES-")),
         ("Intelsat", ("INTELSAT",)),
-        ("NASA", ("ISS (ZARYA)", "HST", "TERRA", "AQUA", "LANDSAT")),
+        ("NASA", ("LANDSAT",)),
+        ("Telesat", ("TELESAT", "LIGHTSPEED")),
+        ("ICEYE", ("ICEYE",)),
+        ("Capella Space", ("CAPELLA",)),
+        ("BlackSky", ("GLOBAL-", "BLACKSKY")),
+        ("Maxar", ("WORLDVIEW", "GEOEYE")),
+        ("AST SpaceMobile", ("BLUEWALKER", "BLUESAT")),
+        ("China SatNet", ("QIANFAN", "GUOWANG")),
     )
     return next((operator for operator, tokens in patterns if any(token in upper for token in tokens)), "Other")
 
@@ -67,6 +86,20 @@ def orbit_class(mean_motion: float) -> str:
     if 0.9 <= mean_motion <= 1.1:
         return "GEO"
     return "HEO"
+
+
+def identify_purpose(name: str) -> str:
+    upper = name.upper()
+    patterns = (
+        ("Broadband", ("STARLINK", "ONEWEB", "KUIPER")),
+        ("Navigation", ("GPS", "GLONASS", "GALILEO", "BEIDOU", "NAVSTAR")),
+        ("Weather", ("NOAA", "GOES", "METEOR", "METOP", "HIMAWARI", "FENGYUN")),
+        ("Earth observation", ("LANDSAT", "SENTINEL", "FLOCK", "DOVE", "SKYSAT", "TERRA", "AQUA")),
+        ("Science", ("HST", "HUBBLE", "JWST", "SWIFT", "TESS", "CHANDRA")),
+        ("Communications", ("IRIDIUM", "GLOBALSTAR", "INTELSAT", "SES-", "O3B")),
+        ("Crewed station", ("ISS", "TIANHE", "CSS (TIANHE)")),
+    )
+    return next((purpose for purpose, tokens in patterns if any(token in upper for token in tokens)), "Other")
 
 
 def normalize(entry: dict[str, Any]) -> dict[str, Any]:
@@ -86,8 +119,15 @@ def normalize(entry: dict[str, Any]) -> dict[str, Any]:
         "argPericenter": float(entry.get("ARG_OF_PERICENTER") or 0),
         "meanAnomaly": float(entry.get("MEAN_ANOMALY") or 0),
         "meanMotion": mean_motion,
+        "bstar": float(entry.get("BSTAR") or 0),
+        "meanMotionDot": float(entry.get("MEAN_MOTION_DOT") or 0),
+        "meanMotionDdot": float(entry.get("MEAN_MOTION_DDOT") or 0),
+        "elementSetNo": int(entry.get("ELEMENT_SET_NO") or 0),
         "operator": identify_operator(name),
         "orbit": orbit_class(mean_motion),
+        "purpose": identify_purpose(name),
+        "countryCode": str(entry.get("COUNTRY_CODE", "Unknown")),
+        "objectType": str(entry.get("OBJECT_TYPE", "Payload")).title(),
     }
 
 
@@ -129,14 +169,25 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
         "argPericenter": float(line2[34:42]),
         "meanAnomaly": float(line2[43:51]),
         "meanMotion": mean_motion,
+        "bstar": 0,
+        "meanMotionDot": 0,
+        "meanMotionDdot": 0,
+        "elementSetNo": int(line1[64:68].strip() or 0),
+        "tle1": line1,
+        "tle2": line2,
         "operator": identify_operator(name),
         "orbit": orbit_class(mean_motion),
+        "purpose": identify_purpose(name),
+        "countryCode": "Unknown",
+        "objectType": "Payload",
     }
 
 
 def read_disk_cache() -> tuple[list[dict[str, Any]], str] | None:
     try:
         cached = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        if cached.get("schemaVersion") != CACHE_SCHEMA_VERSION:
+            return None
         satellites = cached.get("satellites")
         updated_at = cached.get("updatedAt")
         if isinstance(satellites, list) and isinstance(updated_at, str):
@@ -150,7 +201,7 @@ def write_disk_cache(satellites: list[dict[str, Any]], updated_at: str) -> None:
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary = CACHE_FILE.with_suffix(".tmp")
     temporary.write_text(
-        json.dumps({"satellites": satellites, "updatedAt": updated_at}),
+        json.dumps({"schemaVersion": CACHE_SCHEMA_VERSION, "satellites": satellites, "updatedAt": updated_at}),
         encoding="utf-8",
     )
     temporary.replace(CACHE_FILE)
@@ -160,8 +211,7 @@ def write_disk_cache(satellites: list[dict[str, Any]], updated_at: str) -> None:
 def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
     request = Request(CELESTRAK_URL, headers={"User-Agent": "OrbitWatch/0.2"})
-    tls_context = ssl.create_default_context(cafile=certifi.where())
-    with urlopen(request, timeout=30, context=tls_context) as response:
+    with urlopen(request, timeout=30, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
         return [], datetime.now(timezone.utc).isoformat()
@@ -175,8 +225,7 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
 def fetch_satnogs_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
     request = Request(SATNOGS_URL, headers={"User-Agent": "OrbitWatch/0.3", "Accept": "application/json"})
-    tls_context = ssl.create_default_context(cafile=certifi.where())
-    with urlopen(request, timeout=45, context=tls_context) as response:
+    with urlopen(request, timeout=45, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
         raise ValueError("SatNOGS returned an invalid catalog")
@@ -268,3 +317,8 @@ def list_satellites(
         "source": source,
         "error": error,
     }
+
+
+FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")

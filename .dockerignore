@@ -1,0 +1,10 @@
+.git
+.github
+.venv
+node_modules
+frontend/node_modules
+frontend/dist
+frontend/*.tsbuildinfo
+backend/.cache
+__pycache__
+*.pyc

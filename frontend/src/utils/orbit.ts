@@ -1,47 +1,146 @@
-import type { Satellite } from '@/types/satellite';
+import {
+  degreesLat,
+  degreesLong,
+  degreesToRadians,
+  ecfToLookAngles,
+  eciToEcf,
+  eciToGeodetic,
+  gstime,
+  jday,
+  json2satrec,
+  propagate,
+  shadowFraction,
+  sunPos,
+  twoline2satrec,
+  type SatRec,
+} from '@/vendor/satellite';
+import type { Observer, Satellite, SatellitePass } from '@/types/satellite';
 
-const EARTH_RADIUS_KM = 6378.137;
-const EARTH_SCENE_RADIUS = 1.35;
-const MU = 398600.4418;
-const DEG = Math.PI / 180;
+export const EARTH_RADIUS_KM = 6378.137;
+export const EARTH_SCENE_RADIUS = 1.35;
+const satrecCache = new Map<string, SatRec>();
+
+function getSatrec(satellite: Satellite) {
+  const cached = satrecCache.get(satellite.id);
+  if (cached) return cached;
+  const satrec = satellite.tle1 && satellite.tle2
+    ? twoline2satrec(satellite.tle1, satellite.tle2)
+    : json2satrec({
+        OBJECT_NAME: satellite.name,
+        OBJECT_ID: satellite.objectId,
+        EPOCH: satellite.epoch,
+        MEAN_MOTION: satellite.meanMotion,
+        ECCENTRICITY: satellite.eccentricity,
+        INCLINATION: satellite.inclination,
+        RA_OF_ASC_NODE: satellite.raan,
+        ARG_OF_PERICENTER: satellite.argPericenter,
+        MEAN_ANOMALY: satellite.meanAnomaly,
+        NORAD_CAT_ID: satellite.noradId,
+        ELEMENT_SET_NO: satellite.elementSetNo,
+        BSTAR: satellite.bstar,
+        MEAN_MOTION_DOT: satellite.meanMotionDot,
+        MEAN_MOTION_DDOT: satellite.meanMotionDdot,
+      });
+  satrecCache.set(satellite.id, satrec);
+  return satrec;
+}
+
+function state(satellite: Satellite, date: Date) {
+  const result = propagate(getSatrec(satellite), date);
+  if (!result) return null;
+  const gmst = gstime(date);
+  return { positionEci: result.position, positionEcf: eciToEcf(result.position, gmst), gmst };
+}
 
 export function satellitePosition(satellite: Satellite, date: Date): [number, number, number] {
-  const epoch = new Date(satellite.epoch).getTime();
-  const elapsedSeconds = Number.isFinite(epoch) ? (date.getTime() - epoch) / 1000 : 0;
-  const meanMotionRad = (satellite.meanMotion * Math.PI * 2) / 86400;
-  const semiMajor = Math.cbrt(MU / (meanMotionRad * meanMotionRad));
-  const meanAnomaly = satellite.meanAnomaly * DEG + meanMotionRad * elapsedSeconds;
-  const eccentricAnomaly = solveKepler(meanAnomaly, satellite.eccentricity);
-  const trueAnomaly = 2 * Math.atan2(
-    Math.sqrt(1 + satellite.eccentricity) * Math.sin(eccentricAnomaly / 2),
-    Math.sqrt(1 - satellite.eccentricity) * Math.cos(eccentricAnomaly / 2),
-  );
-  const radius = semiMajor * (1 - satellite.eccentricity * Math.cos(eccentricAnomaly));
-  const argument = satellite.argPericenter * DEG + trueAnomaly;
-  const inclination = satellite.inclination * DEG;
-  const raan = satellite.raan * DEG - greenwichAngle(date);
-  const x = radius * (Math.cos(raan) * Math.cos(argument) - Math.sin(raan) * Math.sin(argument) * Math.cos(inclination));
-  const y = radius * Math.sin(argument) * Math.sin(inclination);
-  const z = radius * (Math.sin(raan) * Math.cos(argument) + Math.cos(raan) * Math.sin(argument) * Math.cos(inclination));
+  const result = state(satellite, date);
+  if (!result) return [0, 0, 0];
   const scale = EARTH_SCENE_RADIUS / EARTH_RADIUS_KM;
-  return [x * scale, y * scale, z * scale];
+  return [result.positionEcf.x * scale, result.positionEcf.z * scale, -result.positionEcf.y * scale];
 }
 
-export function altitudeKm(satellite: Satellite) {
-  const radiansPerSecond = (satellite.meanMotion * Math.PI * 2) / 86400;
-  return Math.round(Math.cbrt(MU / (radiansPerSecond * radiansPerSecond)) - EARTH_RADIUS_KM);
+export function satelliteGeodetic(satellite: Satellite, date: Date) {
+  const result = state(satellite, date);
+  if (!result) return null;
+  const location = eciToGeodetic(result.positionEci, result.gmst);
+  return {
+    latitude: degreesLat(location.latitude),
+    longitude: degreesLong(location.longitude),
+    altitude: location.height,
+  };
 }
 
-function solveKepler(meanAnomaly: number, eccentricity: number) {
-  let value = meanAnomaly;
-  for (let index = 0; index < 7; index += 1) {
-    value -= (value - eccentricity * Math.sin(value) - meanAnomaly) / (1 - eccentricity * Math.cos(value));
+export function altitudeKm(satellite: Satellite, date = new Date()) {
+  return Math.round(satelliteGeodetic(satellite, date)?.altitude ?? 0);
+}
+
+export function groundTrack(satellite: Satellite, center: Date, samples = 120) {
+  const periodMinutes = 1440 / satellite.meanMotion;
+  return Array.from({ length: samples + 1 }, (_, index) => {
+    const offset = (index / samples - 0.5) * periodMinutes * 60_000;
+    return satellitePosition(satellite, new Date(center.getTime() + offset));
+  });
+}
+
+export function footprintPoints(satellite: Satellite, date: Date, samples = 72) {
+  const geo = satelliteGeodetic(satellite, date);
+  if (!geo) return [];
+  const angularRadius = Math.acos(EARTH_RADIUS_KM / (EARTH_RADIUS_KM + Math.max(geo.altitude, 1)));
+  const latitude = degreesToRadians(geo.latitude);
+  const longitude = degreesToRadians(geo.longitude);
+  return Array.from({ length: samples + 1 }, (_, index) => {
+    const bearing = (index / samples) * Math.PI * 2;
+    const lat = Math.asin(Math.sin(latitude) * Math.cos(angularRadius) + Math.cos(latitude) * Math.sin(angularRadius) * Math.cos(bearing));
+    const lon = longitude + Math.atan2(Math.sin(bearing) * Math.sin(angularRadius) * Math.cos(latitude), Math.cos(angularRadius) - Math.sin(latitude) * Math.sin(lat));
+    return globePoint(lat, lon, EARTH_SCENE_RADIUS * 1.004);
+  });
+}
+
+export function observerPosition(observer: Observer) {
+  return globePoint(degreesToRadians(observer.latitude), degreesToRadians(observer.longitude), EARTH_SCENE_RADIUS * 1.015);
+}
+
+function globePoint(latitude: number, longitude: number, radius: number): [number, number, number] {
+  return [
+    Math.cos(latitude) * Math.cos(longitude) * radius,
+    Math.sin(latitude) * radius,
+    -Math.cos(latitude) * Math.sin(longitude) * radius,
+  ];
+}
+
+export function predictPasses(satellite: Satellite, observer: Observer, start: Date, hours = 24): SatellitePass[] {
+  const observerGd = {
+    latitude: degreesToRadians(observer.latitude),
+    longitude: degreesToRadians(observer.longitude),
+    height: observer.altitudeKm,
+  };
+  const passes: SatellitePass[] = [];
+  const stepMs = 60_000;
+  const end = start.getTime() + hours * 3_600_000;
+  let current: SatellitePass | null = null;
+  for (let timestamp = start.getTime(); timestamp <= end; timestamp += stepMs) {
+    const date = new Date(timestamp);
+    const result = state(satellite, date);
+    if (!result) continue;
+    const look = ecfToLookAngles(observerGd, result.positionEcf);
+    const elevation = look.elevation * 180 / Math.PI;
+    if (elevation >= 10) {
+      if (!current) current = { rise: date, peak: date, set: date, maxElevation: elevation, rangeKm: look.rangeSat, visible: false };
+      current.set = date;
+      if (elevation > current.maxElevation) {
+        current.peak = date;
+        current.maxElevation = elevation;
+        current.rangeKm = look.rangeSat;
+        const sun = sunPos(jday(date));
+        const sunLook = ecfToLookAngles(observerGd, eciToEcf(sun.rsun, result.gmst));
+        current.visible = shadowFraction(sun.rsun, result.positionEci) > 0.1 && sunLook.elevation < degreesToRadians(-6);
+      }
+    } else if (current) {
+      passes.push(current);
+      current = null;
+      if (passes.length === 3) break;
+    }
   }
-  return value;
-}
-
-function greenwichAngle(date: Date) {
-  const julianDate = date.getTime() / 86400000 + 2440587.5;
-  const days = julianDate - 2451545;
-  return ((280.46061837 + 360.98564736629 * days) % 360) * DEG;
+  if (current && passes.length < 3) passes.push(current);
+  return passes;
 }
