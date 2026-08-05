@@ -101,7 +101,7 @@ function HomePage() {
             </div>
             <Scene satellites={filtered} selectedId={selectedId} onSelect={setSelectedId} time={simulationTime} observer={observer} simulationMode={speed !== 1} />
             <TimeControls time={simulationTime} speed={speed} onSpeed={setSpeed} onTime={setSimulationTime} />
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500"><span>Rendering up to 3,000 filtered objects with SGP4/SDP4 propagation.</span><span>{updatedAt ? `Catalog synced ${new Date(updatedAt).toLocaleString()}` : 'Waiting for catalog sync'}</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500"><span>Rendering all {filtered.length.toLocaleString()} filtered objects with SGP4/SDP4 propagation.</span><span>{updatedAt ? `Catalog synced ${new Date(updatedAt).toLocaleString()}` : 'Waiting for catalog sync'}</span></div>
           </div>
 
           <aside className="rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5 backdrop-blur xl:sticky xl:top-5 xl:self-start">
