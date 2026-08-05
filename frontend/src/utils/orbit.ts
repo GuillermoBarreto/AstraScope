@@ -17,6 +17,7 @@ import type { Observer, Satellite, SatellitePass } from '@/types/satellite';
 
 export const EARTH_RADIUS_KM = 6378.137;
 export const EARTH_SCENE_RADIUS = 1.35;
+const EARTH_GRAVITATIONAL_PARAMETER = 398600.4418;
 const satrecCache = new Map<string, SatRec>();
 
 function getSatrec(satellite: Satellite) {
@@ -71,6 +72,21 @@ export function satelliteGeodetic(satellite: Satellite, date: Date) {
 
 export function altitudeKm(satellite: Satellite, date = new Date()) {
   return Math.round(satelliteGeodetic(satellite, date)?.altitude ?? 0);
+}
+
+export function orbitalMetrics(satellite: Satellite, date = new Date()) {
+  const periodMinutes = 1440 / satellite.meanMotion;
+  const periodSeconds = periodMinutes * 60;
+  const semiMajorAxisKm = Math.cbrt(EARTH_GRAVITATIONAL_PARAMETER * (periodSeconds / (2 * Math.PI)) ** 2);
+  const altitude = satelliteGeodetic(satellite, date)?.altitude ?? semiMajorAxisKm - EARTH_RADIUS_KM;
+  const radius = EARTH_RADIUS_KM + altitude;
+  const speedKmS = Math.sqrt(Math.max(0, EARTH_GRAVITATIONAL_PARAMETER * (2 / radius - 1 / semiMajorAxisKm)));
+  return {
+    periodMinutes,
+    perigeeKm: semiMajorAxisKm * (1 - satellite.eccentricity) - EARTH_RADIUS_KM,
+    apogeeKm: semiMajorAxisKm * (1 + satellite.eccentricity) - EARTH_RADIUS_KM,
+    speedKmS,
+  };
 }
 
 export function groundTrack(satellite: Satellite, center: Date, samples = 120) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Satellite } from '@/types/satellite';
-import { satelliteGeodetic, satellitePosition } from '@/utils/orbit';
+import { orbitalMetrics, satelliteGeodetic, satellitePosition } from '@/utils/orbit';
 
 const iss: Satellite = {
   id: 'iss-25544', name: 'ISS', noradId: 25544, objectId: '1998-067A',
@@ -21,5 +21,13 @@ describe('SGP4 orbit utilities', () => {
     expect(position.every(Number.isFinite)).toBe(true);
     expect(geodetic?.altitude).toBeGreaterThan(350);
     expect(geodetic?.altitude).toBeLessThan(500);
+  });
+
+  it('derives useful orbital metrics', () => {
+    const metrics = orbitalMetrics(iss, new Date('2026-08-02T12:10:00Z'));
+    expect(metrics.periodMinutes).toBeGreaterThan(90);
+    expect(metrics.periodMinutes).toBeLessThan(100);
+    expect(metrics.speedKmS).toBeGreaterThan(7);
+    expect(metrics.apogeeKm).toBeGreaterThan(metrics.perigeeKm);
   });
 });
