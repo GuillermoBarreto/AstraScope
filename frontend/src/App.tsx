@@ -124,7 +124,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 function Filter({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (value: string) => void }) {
-  return <label className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3"><span className="text-xs text-slate-500">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="bg-transparent py-3 text-sm text-slate-200 outline-none">{values.map((item) => <option key={item}>{item}</option>)}</select></label>;
+  return <label className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3"><span className="text-xs text-slate-500">{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="bg-slate-950 py-3 text-sm text-slate-200 outline-none">{values.map((item) => <option key={item} className="bg-slate-950 text-slate-200">{item}</option>)}</select></label>;
 }
 
 function TimeControls({ time, speed, onSpeed, onTime }: { time: Date; speed: number; onSpeed: (speed: number) => void; onTime: (time: Date) => void }) {
