@@ -22,9 +22,15 @@ export function Earth({ radius = 1.35, rotationSpeed = 0.15 }: EarthProps) {
   }, []);
 
   return (
-    <mesh ref={meshRef} castShadow receiveShadow>
-      <sphereGeometry args={[radius, 64, 64]} />
-      <meshStandardMaterial map={texture} roughness={0.9} metalness={0.05} />
-    </mesh>
+    <group>
+      <mesh ref={meshRef} castShadow receiveShadow>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <meshStandardMaterial map={texture} roughness={0.9} metalness={0.05} />
+      </mesh>
+      <mesh scale={1.025}>
+        <sphereGeometry args={[radius, 64, 64]} />
+        <meshBasicMaterial color="#38bdf8" transparent opacity={0.075} side={THREE.BackSide} blending={THREE.AdditiveBlending} />
+      </mesh>
+    </group>
   );
 }

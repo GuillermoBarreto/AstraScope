@@ -1,5 +1,5 @@
 import { ThreeEvent } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import type { Satellite } from '@/types/satellite';
 import { satellitePosition } from '@/utils/orbit';
@@ -15,13 +15,12 @@ const dummy = new THREE.Object3D();
 
 export function Satellites({ satellites, selectedId, onSelect, time }: SatellitesProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const positions = useMemo(() => satellites.slice(0, 3000), [satellites]);
-  const selectedIndex = positions.findIndex((satellite) => satellite.id === selectedId);
+  const selectedIndex = satellites.findIndex((satellite) => satellite.id === selectedId);
 
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
-    positions.forEach((satellite, index) => {
+    satellites.forEach((satellite, index) => {
       const [x, y, z] = satellitePosition(satellite, time);
       dummy.position.set(x, y, z);
       const selected = index === selectedIndex;
@@ -32,15 +31,15 @@ export function Satellites({ satellites, selectedId, onSelect, time }: Satellite
     });
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  }, [positions, selectedIndex, time]);
+  }, [satellites, selectedIndex, time]);
 
   const handleClick = (event: ThreeEvent<MouseEvent>) => {
     event.stopPropagation();
-    if (event.instanceId !== undefined) onSelect(positions[event.instanceId].id);
+    if (event.instanceId !== undefined) onSelect(satellites[event.instanceId].id);
   };
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, positions.length]} onClick={handleClick}>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, satellites.length]} onClick={handleClick}>
       <sphereGeometry args={[0.014, 6, 6]} />
       <meshBasicMaterial toneMapped={false} />
     </instancedMesh>
