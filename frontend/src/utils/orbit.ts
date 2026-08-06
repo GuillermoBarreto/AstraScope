@@ -13,6 +13,7 @@ import {
   twoline2satrec,
   type SatRec,
 } from 'satellite.js';
+import * as THREE from 'three';
 import type { Observer, Satellite, SatellitePass } from '@/types/satellite';
 
 export const EARTH_RADIUS_KM = 6378.137;
@@ -57,6 +58,13 @@ export function satellitePosition(satellite: Satellite, date: Date): [number, nu
   if (!result) return [0, 0, 0];
   const scale = EARTH_SCENE_RADIUS / EARTH_RADIUS_KM;
   return [result.positionEcf.x * scale, result.positionEcf.z * scale, -result.positionEcf.y * scale];
+}
+
+export function sunScenePosition(date: Date, distance = 14): [number, number, number] {
+  const sun = sunPos(jday(date));
+  const positionEcf = eciToEcf({ x: sun.rsun[0], y: sun.rsun[1], z: sun.rsun[2] }, gstime(date));
+  const direction = new THREE.Vector3(positionEcf.x, positionEcf.z, -positionEcf.y).normalize().multiplyScalar(distance);
+  return direction.toArray();
 }
 
 export function satelliteGeodetic(satellite: Satellite, date: Date) {
