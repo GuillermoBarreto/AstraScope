@@ -1,3 +1,4 @@
+import backend.main as main
 from backend.main import api_root, identify_operator, identify_purpose, normalize_satnogs, orbit_class
 from backend.app.core.config import Settings
 
@@ -37,3 +38,32 @@ def test_cors_origins_are_comma_separated() -> None:
         "https://orbiwatch.vercel.app",
         "https://www.guillermobarreto.dev",
     ]
+
+
+def test_disk_cache_preserves_upstream_provenance(tmp_path, monkeypatch) -> None:
+    cache_file = tmp_path / "active-satellites.json"
+    monkeypatch.setattr(main, "CACHE_FILE", cache_file)
+
+    main.write_disk_cache([{"noradId": 25544}], "2026-08-05T12:00:00+00:00", "celestrak")
+
+    assert main.read_disk_cache() == (
+        [{"noradId": 25544}],
+        "2026-08-05T12:00:00+00:00",
+        "celestrak",
+    )
+
+
+def test_primary_catalog_falls_back_to_celestrak(monkeypatch) -> None:
+    class ConfiguredSpaceTrack:
+        @staticmethod
+        def has_space_track_credentials() -> bool:
+            return True
+
+    def fail_spacetrack(_cache_window: int):
+        raise ValueError("authentication failed")
+
+    monkeypatch.setattr(main, "settings", ConfiguredSpaceTrack())
+    monkeypatch.setattr(main, "fetch_spacetrack_catalog", fail_spacetrack)
+    monkeypatch.setattr(main, "fetch_catalog", lambda _cache_window: ([{"noradId": 25544}], "now"))
+
+    assert main.fetch_primary_catalog(1) == ([{"noradId": 25544}], "now", "celestrak")

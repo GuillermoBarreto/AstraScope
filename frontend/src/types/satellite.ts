@@ -40,6 +40,8 @@ export type SatelliteResponse = {
   satellites: Satellite[];
   total: number;
   updatedAt: string;
-  source: 'celestrak' | 'satnogs' | 'cache' | 'stale-cache' | 'unavailable';
+  source: 'celestrak' | 'spacetrack' | 'satnogs' | 'cache' | 'stale-cache' | 'unavailable';
+  upstream?: 'celestrak' | 'spacetrack' | 'satnogs' | null;
+  scope?: 'active' | 'tracked';
   error?: string | null;
 };
