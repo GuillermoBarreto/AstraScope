@@ -43,6 +43,7 @@ SPACE_TRACK_GP_URL = (
 CACHE_FILE = Path(__file__).resolve().parent / ".cache" / "active-satellites.json"
 CACHE_SECONDS = 2 * 60 * 60
 FAILURE_RETRY_SECONDS = 5 * 60
+CELESTRAK_TIMEOUT_SECONDS = 120
 CACHE_SCHEMA_VERSION = 3
 last_failure_at = 0.0
 last_failure_error: str | None = None
@@ -231,7 +232,7 @@ def write_disk_cache(satellites: list[dict[str, Any]], updated_at: str, upstream
 def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
     request = Request(CELESTRAK_URL, headers={"User-Agent": "OrbiWatch/0.2"})
-    with urlopen(request, timeout=30, context=tls_context()) as response:
+    with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
         return [], datetime.now(timezone.utc).isoformat()

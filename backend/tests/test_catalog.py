@@ -72,3 +72,7 @@ def test_primary_catalog_falls_back_to_celestrak(monkeypatch) -> None:
 def test_provider_failure_retry_is_shorter_than_catalog_cache() -> None:
     assert main.FAILURE_RETRY_SECONDS < main.CACHE_SECONDS
     assert main.FAILURE_RETRY_SECONDS == 5 * 60
+
+
+def test_bulk_celestrak_download_allows_slow_cold_start() -> None:
+    assert main.CELESTRAK_TIMEOUT_SECONDS >= 120
