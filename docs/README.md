@@ -1,6 +1,6 @@
-# OrbitWatch Documentation
+# OrbiWatch Documentation
 
-This folder holds project notes and architecture decisions for the OrbitWatch foundation milestone.
+This folder holds project notes and architecture decisions for the OrbiWatch foundation milestone.
 
 ## Current scope
 

@@ -2,24 +2,27 @@ import json
 import re
 import ssl
 import time
+from http.cookiejar import CookieJar
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+from urllib.request import HTTPCookieProcessor, HTTPSHandler, Request, build_opener, urlopen
 
 import certifi
 import truststore
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 try:
     from app.core.config import settings
 except ModuleNotFoundError:  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
 
-app = FastAPI(title="OrbitWatch API", version="0.2.0")
+app = FastAPI(title="OrbiWatch API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,12 +31,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 CELESTRAK_URL = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json"
 SATNOGS_URL = "https://db.satnogs.org/api/tle/?format=json"
+SPACE_TRACK_LOGIN_URL = "https://www.space-track.org/ajaxauth/login"
+SPACE_TRACK_GP_URL = (
+    "https://www.space-track.org/basicspacedata/query/class/gp/"
+    "decay_date/null-val/epoch/%3Enow-10/orderby/NORAD_CAT_ID/format/json"
+)
 CACHE_FILE = Path(__file__).resolve().parent / ".cache" / "active-satellites.json"
 CACHE_SECONDS = 2 * 60 * 60
-CACHE_SCHEMA_VERSION = 2
+CACHE_SCHEMA_VERSION = 3
 last_failure_at = 0.0
 last_failure_error: str | None = None
 
@@ -187,25 +196,31 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def read_disk_cache() -> tuple[list[dict[str, Any]], str] | None:
+def read_disk_cache() -> tuple[list[dict[str, Any]], str, str] | None:
     try:
         cached = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
         if cached.get("schemaVersion") != CACHE_SCHEMA_VERSION:
             return None
         satellites = cached.get("satellites")
         updated_at = cached.get("updatedAt")
-        if isinstance(satellites, list) and isinstance(updated_at, str):
-            return satellites, updated_at
+        upstream = cached.get("upstream")
+        if isinstance(satellites, list) and isinstance(updated_at, str) and upstream in {"celestrak", "spacetrack", "satnogs"}:
+            return satellites, updated_at, upstream
     except (OSError, json.JSONDecodeError, AttributeError):
         pass
     return None
 
 
-def write_disk_cache(satellites: list[dict[str, Any]], updated_at: str) -> None:
+def write_disk_cache(satellites: list[dict[str, Any]], updated_at: str, upstream: str) -> None:
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     temporary = CACHE_FILE.with_suffix(".tmp")
     temporary.write_text(
-        json.dumps({"schemaVersion": CACHE_SCHEMA_VERSION, "satellites": satellites, "updatedAt": updated_at}),
+        json.dumps({
+            "schemaVersion": CACHE_SCHEMA_VERSION,
+            "satellites": satellites,
+            "updatedAt": updated_at,
+            "upstream": upstream,
+        }),
         encoding="utf-8",
     )
     temporary.replace(CACHE_FILE)
@@ -214,21 +229,21 @@ def write_disk_cache(satellites: list[dict[str, Any]], updated_at: str) -> None:
 @lru_cache(maxsize=1)
 def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
-    request = Request(CELESTRAK_URL, headers={"User-Agent": "OrbitWatch/0.2"})
+    request = Request(CELESTRAK_URL, headers={"User-Agent": "OrbiWatch/0.2"})
     with urlopen(request, timeout=30, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
         return [], datetime.now(timezone.utc).isoformat()
     satellites = [normalize(item) for item in payload if isinstance(item, dict)]
     updated_at = datetime.now(timezone.utc).isoformat()
-    write_disk_cache(satellites, updated_at)
+    write_disk_cache(satellites, updated_at, "celestrak")
     return satellites, updated_at
 
 
 @lru_cache(maxsize=1)
 def fetch_satnogs_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
-    request = Request(SATNOGS_URL, headers={"User-Agent": "OrbitWatch/0.3", "Accept": "application/json"})
+    request = Request(SATNOGS_URL, headers={"User-Agent": "OrbiWatch/0.3", "Accept": "application/json"})
     with urlopen(request, timeout=45, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
@@ -244,8 +259,58 @@ def fetch_satnogs_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]
     if not satellites:
         raise ValueError("SatNOGS returned no valid orbital records")
     updated_at = datetime.now(timezone.utc).isoformat()
-    write_disk_cache(satellites, updated_at)
+    write_disk_cache(satellites, updated_at, "satnogs")
     return satellites, updated_at
+
+
+@lru_cache(maxsize=1)
+def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
+    del cache_window
+    if not settings.has_space_track_credentials():
+        raise ValueError("Space-Track credentials are not configured")
+
+    opener = build_opener(HTTPCookieProcessor(CookieJar()), HTTPSHandler(context=tls_context()))
+    login_body = urlencode({
+        "identity": settings.space_track_identity,
+        "password": settings.space_track_password,
+    }).encode("utf-8")
+    login_request = Request(
+        SPACE_TRACK_LOGIN_URL,
+        data=login_body,
+        headers={"User-Agent": "OrbiWatch/0.4", "Content-Type": "application/x-www-form-urlencoded"},
+    )
+    with opener.open(login_request, timeout=30) as response:
+        response.read()
+
+    catalog_request = Request(
+        SPACE_TRACK_GP_URL,
+        headers={"User-Agent": "OrbiWatch/0.4", "Accept": "application/json"},
+    )
+    with opener.open(catalog_request, timeout=90) as response:
+        payload = json.load(response)
+    if not isinstance(payload, list) or not payload:
+        raise ValueError("Space-Track returned no orbital records; verify the configured credentials")
+
+    satellites = [normalize(item) for item in payload if isinstance(item, dict)]
+    updated_at = datetime.now(timezone.utc).isoformat()
+    write_disk_cache(satellites, updated_at, "spacetrack")
+    return satellites, updated_at
+
+
+def fetch_primary_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str, str]:
+    errors = []
+    if settings.has_space_track_credentials():
+        try:
+            satellites, updated_at = fetch_spacetrack_catalog(cache_window)
+            return satellites, updated_at, "spacetrack"
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+            errors.append(f"Space-Track: {type(exc).__name__}: {exc}")
+    try:
+        satellites, updated_at = fetch_catalog(cache_window)
+        return satellites, updated_at, "celestrak"
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+        errors.append(f"CelesTrak: {type(exc).__name__}: {exc}")
+    raise ValueError("; ".join(errors))
 
 
 @app.get("/satellites")
@@ -256,7 +321,9 @@ def list_satellites(
     search: str | None = Query(default=None, max_length=80),
 ) -> dict[str, Any]:
     global last_failure_at, last_failure_error
-    source = "celestrak"
+    preferred_upstream = "spacetrack" if settings.has_space_track_credentials() else "celestrak"
+    source = preferred_upstream
+    upstream: str | None = preferred_upstream
     error = None
     cached = read_disk_cache()
     try:
@@ -265,20 +332,22 @@ def list_satellites(
             cache_age = datetime.now(timezone.utc) - datetime.fromisoformat(cached[1])
         else:
             cache_age = None
-        if cached and cache_age and cache_age.total_seconds() < CACHE_SECONDS:
-            satellites, updated_at = cached
+        if cached and cache_age and cache_age.total_seconds() < CACHE_SECONDS and cached[2] in {"celestrak", "spacetrack"}:
+            satellites, updated_at, upstream = cached
             source = "cache"
         elif time.time() - last_failure_at < CACHE_SECONDS:
             error = last_failure_error
             if cached:
-                satellites, updated_at = cached
+                satellites, updated_at, upstream = cached
                 source = "stale-cache"
             else:
                 satellites = []
                 updated_at = datetime.now(timezone.utc).isoformat()
                 source = "unavailable"
+                upstream = None
         else:
-            satellites, updated_at = fetch_catalog(cache_window)
+            satellites, updated_at, upstream = fetch_primary_catalog(cache_window)
+            source = upstream
     except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         detail = ""
         if isinstance(exc, HTTPError):
@@ -290,18 +359,20 @@ def list_satellites(
         last_failure_at = time.time()
         last_failure_error = error
         if cached:
-            satellites, updated_at = cached
+            satellites, updated_at, upstream = cached
             source = "stale-cache"
         else:
             try:
                 satellites, updated_at = fetch_satnogs_catalog(cache_window)
                 source = "satnogs"
+                upstream = "satnogs"
                 error = None
             except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as fallback_exc:
                 satellites = []
                 updated_at = datetime.now(timezone.utc).isoformat()
                 source = "unavailable"
-                error = f"CelesTrak: {error}; SatNOGS: {type(fallback_exc).__name__}: {fallback_exc}"
+                upstream = None
+                error = f"Primary catalog: {error}; SatNOGS: {type(fallback_exc).__name__}: {fallback_exc}"
 
     if operator and operator.lower() != "all":
         satellites = [item for item in satellites if item["operator"].lower() == operator.lower()]
@@ -319,5 +390,7 @@ def list_satellites(
         "total": len(satellites),
         "updatedAt": updated_at,
         "source": source,
+        "upstream": upstream,
+        "scope": "tracked" if upstream == "spacetrack" else "active",
         "error": error,
     }
