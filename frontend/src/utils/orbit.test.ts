@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Satellite } from '@/types/satellite';
-import { orbitalMetrics, satelliteGeodetic, satellitePosition } from '@/utils/orbit';
+import { orbitalMetrics, satelliteGeodetic, satellitePosition, sunScenePosition } from '@/utils/orbit';
 
 const iss: Satellite = {
   id: 'iss-25544', name: 'ISS', noradId: 25544, objectId: '1998-067A',
@@ -14,6 +14,12 @@ const iss: Satellite = {
 };
 
 describe('SGP4 orbit utilities', () => {
+  it('places the Sun at the requested scene distance', () => {
+    const position = sunScenePosition(new Date('2026-08-05T12:00:00Z'), 14);
+    expect(Math.hypot(...position)).toBeCloseTo(14, 6);
+    expect(position.every(Number.isFinite)).toBe(true);
+  });
+
   it('propagates a real TLE into a plausible LEO position', () => {
     const date = new Date('2026-08-02T12:10:00Z');
     const position = satellitePosition(iss, date);
