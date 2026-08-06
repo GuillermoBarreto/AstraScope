@@ -42,6 +42,7 @@ SPACE_TRACK_GP_URL = (
 )
 CACHE_FILE = Path(__file__).resolve().parent / ".cache" / "active-satellites.json"
 CACHE_SECONDS = 2 * 60 * 60
+FAILURE_RETRY_SECONDS = 5 * 60
 CACHE_SCHEMA_VERSION = 3
 last_failure_at = 0.0
 last_failure_error: str | None = None
@@ -335,7 +336,7 @@ def list_satellites(
         if cached and cache_age and cache_age.total_seconds() < CACHE_SECONDS and cached[2] in {"celestrak", "spacetrack"}:
             satellites, updated_at, upstream = cached
             source = "cache"
-        elif time.time() - last_failure_at < CACHE_SECONDS:
+        elif time.time() - last_failure_at < FAILURE_RETRY_SECONDS:
             error = last_failure_error
             if cached:
                 satellites, updated_at, upstream = cached
@@ -366,7 +367,6 @@ def list_satellites(
                 satellites, updated_at = fetch_satnogs_catalog(cache_window)
                 source = "satnogs"
                 upstream = "satnogs"
-                error = None
             except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as fallback_exc:
                 satellites = []
                 updated_at = datetime.now(timezone.utc).isoformat()

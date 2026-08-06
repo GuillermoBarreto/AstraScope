@@ -67,3 +67,8 @@ def test_primary_catalog_falls_back_to_celestrak(monkeypatch) -> None:
     monkeypatch.setattr(main, "fetch_catalog", lambda _cache_window: ([{"noradId": 25544}], "now"))
 
     assert main.fetch_primary_catalog(1) == ([{"noradId": 25544}], "now", "celestrak")
+
+
+def test_provider_failure_retry_is_shorter_than_catalog_cache() -> None:
+    assert main.FAILURE_RETRY_SECONDS < main.CACHE_SECONDS
+    assert main.FAILURE_RETRY_SECONDS == 5 * 60
