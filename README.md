@@ -1,8 +1,12 @@
-# OrbiWatch
+# AstraScope
 
-![OrbiWatch: Earth with satellite orbital paths](docs/images/orbitwatch-hero.png)
+Formerly OrbiWatch.
 
-OrbiWatch is an interactive 3D satellite explorer built with React, Three.js, and FastAPI. It combines public orbital catalogs with SGP4/SDP4 propagation to visualize spacecraft positions, ground tracks, coverage footprints, and upcoming passes over an observer.
+> The repository name `GuillermoBarreto/orbiwatch` is legacy. The product is now AstraScope; the repository will be renamed separately after branding verification.
+
+![AstraScope: Earth with satellite orbital paths](docs/images/orbitwatch-hero.png)
+
+AstraScope is an interactive space-monitoring platform built with React, Three.js, and FastAPI. Explore Earth's orbital neighborhood and near-space activity in real time through satellite tracking, near-Earth object close approaches, and reconstructed atmospheric fireball events.
 
 ## Features
 
@@ -25,7 +29,7 @@ OrbiWatch is an interactive 3D satellite explorer built with React, Three.js, an
 
 Use the in-app mode selector to switch between Satellite Watch and Impact Watch. Impact Watch displays NASA/JPL NeoWs close approaches for the next seven days and CNEOS fireball records for selectable recent periods. It includes hazardous-classification, date, diameter, energy, and coordinate-availability filters. Fireballs with reported coordinates are plotted on the existing globe; events without coordinates remain available in the list.
 
-“Potentially hazardous” is a NASA/JPL classification based on an object's size and how closely its orbit can approach Earth. It does **not** mean an impact is predicted. Close-approach distances are computed by NASA/JPL, and fireballs are detected or reconstructed atmospheric events reported by U.S. Government sensors. Coverage and fields can be incomplete. OrbiWatch does not calculate collision probability or asteroid trajectories and is not an emergency warning, navigation, or planetary-defense system.
+“Potentially hazardous” is a NASA/JPL classification based on an object's size and how closely its orbit can approach Earth. It does **not** mean an impact is predicted. Close-approach distances are computed by NASA/JPL, and fireballs are detected or reconstructed atmospheric events reported by U.S. Government sensors. Coverage and fields can be incomplete. AstraScope does not calculate collision probability or asteroid trajectories and is not an emergency warning, navigation, or planetary-defense system.
 
 Backend endpoints (also available with an `/api` prefix):
 
@@ -67,6 +71,8 @@ python -m pytest backend/tests -q
 ```
 
 ## Deployment
+
+Legacy production domains currently remain active during the branding migration. Keep the existing Vercel and Render project identifiers and URLs until the application branding is verified in production.
 
 ### Frontend — Vercel
 
@@ -111,7 +117,7 @@ SPACE_TRACK_IDENTITY=your-space-track-email
 SPACE_TRACK_PASSWORD=your-space-track-password
 ```
 
-Without those credentials, OrbiWatch uses CelesTrak's complete public active catalog. SatNOGS remains the
+Without those credentials, AstraScope uses CelesTrak's complete public active catalog. SatNOGS remains the
 last-resort fallback. Catalog downloads are cached for two hours, staying below Space-Track's documented
 limit of one bulk GP request per hour.
 
@@ -125,7 +131,7 @@ Deploy the Render backend first, copy its public URL into Vercel as `VITE_API_BA
 
 ## Data architecture
 
-OrbiWatch prefers CelesTrak's active OMM catalog and complies with its one-download-per-update policy by caching for two hours. If CelesTrak is unavailable or rate-limited before the first cache fill, the API uses the open SatNOGS TLE catalog. The latest successful normalized catalog is persisted in `backend/.cache` and served during upstream outages.
+AstraScope prefers CelesTrak's active OMM catalog and complies with its one-download-per-update policy by caching for two hours. If CelesTrak is unavailable or rate-limited before the first cache fill, the API uses the open SatNOGS TLE catalog. The latest successful normalized catalog is persisted in `backend/.cache` and served during upstream outages.
 
 ## Repository structure
 

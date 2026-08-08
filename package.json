@@ -1,5 +1,5 @@
 {
-  "name": "orbitwatch",
+  "name": "astrascope",
   "private": true,
   "workspaces": [
     "frontend"

@@ -51,7 +51,7 @@ def fetch_neos(days: int, api_key: str, cache_window: int) -> list[NearEarthObje
     del cache_window
     start = date.today()
     params = urlencode({"start_date": start.isoformat(), "end_date": (start + timedelta(days=days - 1)).isoformat(), "api_key": api_key})
-    request = Request(f"{NEOWS_URL}?{params}", headers={"User-Agent": "OrbiWatch/0.5", "Accept": "application/json"})
+    request = Request(f"{NEOWS_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     days_payload = payload.get("near_earth_objects")

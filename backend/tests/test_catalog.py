@@ -1,5 +1,5 @@
 import backend.main as main
-from backend.main import api_root, identify_operator, identify_purpose, normalize_satnogs, orbit_class
+from backend.main import api_root, health_check, identify_operator, identify_purpose, normalize_satnogs, orbit_class
 from backend.app.core.config import Settings
 
 
@@ -29,7 +29,11 @@ def test_catalog_classification() -> None:
 
 
 def test_api_root_identifies_service() -> None:
-    assert api_root() == {"service": "OrbiWatch API", "status": "online", "docs": "/docs"}
+    assert api_root() == {"service": "AstraScope API", "status": "online", "docs": "/docs"}
+
+
+def test_health_check_identifies_service() -> None:
+    assert health_check()["service"] == "astrascope-backend"
 
 
 def test_cors_origins_are_comma_separated() -> None:

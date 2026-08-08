@@ -17,6 +17,10 @@ const PRESETS = [
   'Science',
 ] as const;
 const SORTS = ['Name', 'Altitude', 'Inclination'] as const;
+const FAVORITES_KEY = 'astrascope-favorites';
+const OBSERVER_KEY = 'astrascope-observer';
+const LEGACY_FAVORITES_KEY = 'orbitwatch-favorites';
+const LEGACY_OBSERVER_KEY = 'orbitwatch-observer';
 type Preset = (typeof PRESETS)[number];
 type Sort = (typeof SORTS)[number];
 
@@ -81,7 +85,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   }, [speed]);
 
   useEffect(() => {
-    localStorage.setItem('orbitwatch-favorites', JSON.stringify([...favorites]));
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
   }, [favorites]);
 
   useEffect(() => {
@@ -149,8 +153,8 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
 
   const saveObserver = (next: Observer | null) => {
     setObserver(next);
-    if (next) localStorage.setItem('orbitwatch-observer', JSON.stringify(next));
-    else localStorage.removeItem('orbitwatch-observer');
+    if (next) localStorage.setItem(OBSERVER_KEY, JSON.stringify(next));
+    else localStorage.removeItem(OBSERVER_KEY);
   };
 
   const selectSatellite = (id: string | null) => {
@@ -177,14 +181,14 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           <div>
             <div className="mb-3 flex items-center gap-3">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-400 font-black text-slate-950">
-                O
+                A
               </span>
               <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-300">
-                OrbiWatch
+                AstraScope
               </p>
             </div>
             <h1 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-6xl">
-              Earth’s orbital neighborhood, live.
+              Explore Earth's orbital neighborhood and near-space activity in real time.
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-slate-400">
               Explore real spacecraft with SGP4 propagation, orbit tracks, coverage footprints, time
@@ -706,7 +710,7 @@ function Detail({ label, value }: { label: string; value: string }) {
 
 function readObserver(): Observer | null {
   try {
-    const value = localStorage.getItem('orbitwatch-observer');
+    const value = localStorage.getItem(OBSERVER_KEY) ?? localStorage.getItem(LEGACY_OBSERVER_KEY);
     return value ? (JSON.parse(value) as Observer) : null;
   } catch {
     return null;
@@ -715,7 +719,7 @@ function readObserver(): Observer | null {
 
 function readFavorites(): Set<string> {
   try {
-    const value = localStorage.getItem('orbitwatch-favorites');
+    const value = localStorage.getItem(FAVORITES_KEY) ?? localStorage.getItem(LEGACY_FAVORITES_KEY);
     return new Set(value ? (JSON.parse(value) as string[]) : []);
   } catch {
     return new Set();

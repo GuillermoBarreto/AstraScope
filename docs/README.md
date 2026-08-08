@@ -1,6 +1,6 @@
-# OrbiWatch Documentation
+# AstraScope Documentation
 
-This folder holds project notes and architecture decisions for the OrbiWatch foundation milestone.
+This folder holds project notes and architecture decisions for the AstraScope platform (formerly OrbiWatch).
 
 ## Current scope
 
@@ -9,9 +9,9 @@ This folder holds project notes and architecture decisions for the OrbiWatch fou
 - FastAPI backend with CORS and health endpoint
 - Shared environment configuration pattern
 
-## Future milestones
+## Implemented architecture
 
-- Satellite data integration
-- 3D Earth visualization
-- Search and filtering experience
-- Deployment and monitoring
+- Satellite catalog aggregation and SGP4/SDP4 visualization
+- Impact Watch with NASA/JPL near-Earth object and fireball adapters
+- Shared interactive 3D Earth scene infrastructure
+- Split Vercel frontend and Render FastAPI deployment
