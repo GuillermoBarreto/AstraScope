@@ -19,6 +19,20 @@ OrbiWatch is an interactive 3D satellite explorer built with React, Three.js, an
 - upcoming 24-hour pass predictions above 10° elevation
 - responsive desktop and mobile interface
 - split Vercel frontend and Render API deployment configuration
+- Impact Watch for upcoming near-Earth object approaches, potentially hazardous classifications, and recent atmospheric fireballs
+
+## Impact Watch
+
+Use the in-app mode selector to switch between Satellite Watch and Impact Watch. Impact Watch displays NASA/JPL NeoWs close approaches for the next seven days and CNEOS fireball records for selectable recent periods. It includes hazardous-classification, date, diameter, energy, and coordinate-availability filters. Fireballs with reported coordinates are plotted on the existing globe; events without coordinates remain available in the list.
+
+“Potentially hazardous” is a NASA/JPL classification based on an object's size and how closely its orbit can approach Earth. It does **not** mean an impact is predicted. Close-approach distances are computed by NASA/JPL, and fireballs are detected or reconstructed atmospheric events reported by U.S. Government sensors. Coverage and fields can be incomplete. OrbiWatch does not calculate collision probability or asteroid trajectories and is not an emergency warning, navigation, or planetary-defense system.
+
+Backend endpoints (also available with an `/api` prefix):
+
+- `GET /impact/neos?days=7&hazardous=false&min_diameter_km=0`
+- `GET /impact/fireballs?days=30&min_energy=0&has_coordinates=true`
+
+Responses contain normalized camel-case records, provider provenance, update time, and structured upstream errors. Impact responses are cached in-process for 15 minutes. The JPL Fireball API is unauthenticated. NeoWs uses the backend-only `NASA_API_KEY`; it defaults to NASA's rate-limited `DEMO_KEY` for local evaluation. Set a registered key in production, and never place it in a `VITE_` variable.
 
 Orbital predictions are intended for education and visualization—not navigation, conjunction assessment, or operational decisions.
 
@@ -85,6 +99,7 @@ Required Render environment variables:
 ```text
 APP_ENV=production
 CORS_ORIGINS=https://orbiwatch.vercel.app
+NASA_API_KEY=your-nasa-api-key
 ```
 
 Optional Space-Track credentials enable the broader catalog of recently propagable tracked objects,
@@ -116,6 +131,8 @@ OrbiWatch prefers CelesTrak's active OMM catalog and complies with its one-downl
 
 - `frontend/`: React, TypeScript, TailwindCSS, React Three Fiber, and satellite.js
 - `backend/`: FastAPI catalog aggregation, normalization, caching, and CORS configuration
+- `backend/app/api/impact.py`: validated Impact Watch routes and structured failure responses
+- `backend/app/services/`: NASA/JPL adapters, normalization, and request caching
 - `backend/tests/`: catalog normalization and classification tests
 - `docs/`: project imagery and architecture notes
 - `render.yaml`: Render backend deployment configuration

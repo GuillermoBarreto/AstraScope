@@ -3,6 +3,7 @@ import { Scene } from '@/components/Scene/Scene';
 import type { Observer, Satellite, SatelliteResponse } from '@/types/satellite';
 import { apiUrl } from '@/utils/api';
 import { altitudeKm, orbitalMetrics, predictPasses, satelliteGeodetic } from '@/utils/orbit';
+import { ImpactWatch, ModeSelector } from '@/components/Impact/ImpactWatch';
 
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
 const SPEEDS = [0, 1, 10, 60, 600];
@@ -19,7 +20,7 @@ const SORTS = ['Name', 'Altitude', 'Inclination'] as const;
 type Preset = (typeof PRESETS)[number];
 type Sort = (typeof SORTS)[number];
 
-function HomePage() {
+function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [catalog, setCatalog] = useState<Satellite[]>([]);
   const [query, setQuery] = useState('');
   const [operator, setOperator] = useState('All');
@@ -190,7 +191,7 @@ function HomePage() {
               travel, and passes over your location.
             </p>
           </div>
-          <StatusBadge status={status} source={source} upstream={upstream} />
+          <div className="space-y-3"><ModeSelector impact={false} onMode={onMode} /><StatusBadge status={status} source={source} upstream={upstream} /></div>
         </header>
 
         <section aria-label="Catalog summary" className="mb-5 grid gap-3 sm:grid-cols-3">
@@ -729,5 +730,6 @@ function matchesPreset(satellite: Satellite, preset: Preset, favorites: Set<stri
 }
 
 export default function App() {
-  return <HomePage />;
+  const [mode, setMode] = useState<'satellite' | 'impact'>('satellite');
+  return mode === 'satellite' ? <SatelliteWatch onMode={() => setMode('impact')} /> : <ImpactWatch onMode={() => setMode('satellite')} />;
 }

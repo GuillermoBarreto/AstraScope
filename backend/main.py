@@ -18,11 +18,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 try:
+    from app.api.impact import router as impact_router
+except ModuleNotFoundError:  # pragma: no cover - supports repository-root imports
+    from backend.app.api.impact import router as impact_router
+
+try:
     from app.core.config import settings
 except ModuleNotFoundError:  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
 
 app = FastAPI(title="OrbiWatch API", version="0.2.0")
+app.include_router(impact_router)
 
 app.add_middleware(
     CORSMiddleware,
