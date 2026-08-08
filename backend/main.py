@@ -27,7 +27,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
 
-app = FastAPI(title="OrbiWatch API", version="0.2.0")
+app = FastAPI(title="AstraScope API", version="0.2.0")
 app.include_router(impact_router)
 
 app.add_middleware(
@@ -65,12 +65,12 @@ def tls_context() -> ssl.SSLContext:
 @app.get("/health")
 @app.get("/api/health")
 def health_check() -> dict[str, str]:
-    return {"status": "ok", "service": "orbitwatch-backend", "environment": settings.app_env}
+    return {"status": "ok", "service": "astrascope-backend", "environment": settings.app_env}
 
 
 @app.get("/")
 def api_root() -> dict[str, str]:
-    return {"service": "OrbiWatch API", "status": "online", "docs": "/docs"}
+    return {"service": "AstraScope API", "status": "online", "docs": "/docs"}
 
 
 def identify_operator(name: str) -> str:
@@ -237,7 +237,7 @@ def write_disk_cache(satellites: list[dict[str, Any]], updated_at: str, upstream
 @lru_cache(maxsize=1)
 def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
-    request = Request(CELESTRAK_URL, headers={"User-Agent": "OrbiWatch/0.2"})
+    request = Request(CELESTRAK_URL, headers={"User-Agent": "AstraScope/0.2"})
     with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
@@ -251,7 +251,7 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
 @lru_cache(maxsize=1)
 def fetch_satnogs_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
-    request = Request(SATNOGS_URL, headers={"User-Agent": "OrbiWatch/0.3", "Accept": "application/json"})
+    request = Request(SATNOGS_URL, headers={"User-Agent": "AstraScope/0.3", "Accept": "application/json"})
     with urlopen(request, timeout=45, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
@@ -285,14 +285,14 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
     login_request = Request(
         SPACE_TRACK_LOGIN_URL,
         data=login_body,
-        headers={"User-Agent": "OrbiWatch/0.4", "Content-Type": "application/x-www-form-urlencoded"},
+        headers={"User-Agent": "AstraScope/0.4", "Content-Type": "application/x-www-form-urlencoded"},
     )
     with opener.open(login_request, timeout=30) as response:
         response.read()
 
     catalog_request = Request(
         SPACE_TRACK_GP_URL,
-        headers={"User-Agent": "OrbiWatch/0.4", "Accept": "application/json"},
+        headers={"User-Agent": "AstraScope/0.4", "Accept": "application/json"},
     )
     with opener.open(catalog_request, timeout=90) as response:
         payload = json.load(response)

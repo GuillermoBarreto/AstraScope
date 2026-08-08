@@ -54,7 +54,7 @@ def fetch_fireballs(days: int, cache_window: int) -> list[Fireball]:
     del cache_window
     start = date.today() - timedelta(days=days)
     params = urlencode({"date-min": start.isoformat(), "vel-comp": "true", "sort": "-date"})
-    request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": "OrbiWatch/0.5", "Accept": "application/json"})
+    request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if int(payload.get("count", 0)) == 0:

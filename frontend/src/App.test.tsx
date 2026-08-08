@@ -10,13 +10,13 @@ vi.mock('@/components/Impact/ImpactScene', () => ({
 }));
 
 describe('App', () => {
-  it('renders the OrbiWatch globe experience', () => {
+  it('renders the AstraScope globe experience', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
 
     render(<App />);
 
-    expect(screen.getByText('OrbiWatch')).toBeInTheDocument();
-    expect(screen.getByText(/Earth’s orbital neighborhood, live/i)).toBeInTheDocument();
+    expect(screen.getByText('AstraScope')).toBeInTheDocument();
+    expect(screen.getByText(/Explore Earth's orbital neighborhood and near-space activity in real time/i)).toBeInTheDocument();
   });
 
   it('renders Impact Watch, filters, and the hazardous classification', async () => {
