@@ -15,6 +15,7 @@ class Settings:
     )
     space_track_identity: str = os.getenv("SPACE_TRACK_IDENTITY", "")
     space_track_password: str = os.getenv("SPACE_TRACK_PASSWORD", "")
+    nasa_api_key: str = os.getenv("NASA_API_KEY", "DEMO_KEY")
 
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
