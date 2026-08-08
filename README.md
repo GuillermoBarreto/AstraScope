@@ -2,8 +2,6 @@
 
 Formerly OrbiWatch.
 
-> The repository name `GuillermoBarreto/orbiwatch` is legacy. The product is now AstraScope; the repository will be renamed separately after branding verification.
-
 ![AstraScope: Earth with satellite orbital paths](docs/images/orbitwatch-hero.png)
 
 AstraScope is an interactive space-monitoring platform built with React, Three.js, and FastAPI. Explore Earth's orbital neighborhood and near-space activity in real time through satellite tracking, near-Earth object close approaches, and reconstructed atmospheric fireball events.
