@@ -27,7 +27,7 @@ AstraScope is an interactive space-monitoring platform built with React, Three.j
 
 ## Impact Watch
 
-Use the in-app mode selector to switch between Satellite Watch and Impact Watch. Impact Watch displays NASA/JPL NeoWs close approaches for the next seven days and CNEOS fireball records for selectable recent periods. It includes hazardous-classification, date, diameter, energy, and coordinate-availability filters. Fireballs with reported coordinates are plotted on the existing globe; events without coordinates remain available in the list.
+Use the in-app mode selector to switch between Satellite Watch and Impact Watch. The selected view is reflected in the URL (`?view=impact`), so Impact Watch can be bookmarked or shared and browser Back/Forward navigation works as expected. Impact Watch displays NASA/JPL NeoWs close approaches for the next seven days and CNEOS fireball records for selectable recent periods. It includes hazardous-classification, date, diameter, energy, and coordinate-availability filters. Fireballs with reported coordinates are plotted on the existing globe; events without coordinates remain available in the list.
 
 “Potentially hazardous” is a NASA/JPL classification based on an object's size and how closely its orbit can approach Earth. It does **not** mean an impact is predicted. Close-approach distances are computed by NASA/JPL, and fireballs are detected or reconstructed atmospheric events reported by U.S. Government sensors. Coverage and fields can be incomplete. AstraScope does not calculate collision probability or asteroid trajectories and is not an emergency warning, navigation, or planetary-defense system.
 

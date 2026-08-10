@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
 vi.mock('@/components/Scene/Scene', () => ({
@@ -10,6 +10,10 @@ vi.mock('@/components/Impact/ImpactScene', () => ({
 }));
 
 describe('App', () => {
+  beforeEach(() => {
+    window.history.replaceState({}, '', '/');
+  });
+
   it('renders the AstraScope globe experience', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
 
@@ -40,5 +44,21 @@ describe('App', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: 'Impact Watch' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('temporarily unavailable'));
+  });
+
+  it('deep-links to Impact Watch and keeps mode navigation in browser history', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
+    window.history.replaceState({}, '', '/?view=impact');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: 'Impact Watch' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Satellite Watch' }));
+    expect(window.location.search).toBe('');
+    expect(screen.getByText(/Explore Earth's orbital neighborhood/i)).toBeInTheDocument();
+
+    window.history.replaceState({}, '', '/?view=impact');
+    fireEvent.popState(window);
+    expect(screen.getByRole('heading', { name: 'Impact Watch' })).toBeInTheDocument();
   });
 });
