@@ -734,6 +734,31 @@ function matchesPreset(satellite: Satellite, preset: Preset, favorites: Set<stri
 }
 
 export default function App() {
-  const [mode, setMode] = useState<'satellite' | 'impact'>('satellite');
-  return mode === 'satellite' ? <SatelliteWatch onMode={() => setMode('impact')} /> : <ImpactWatch onMode={() => setMode('satellite')} />;
+  const [mode, setMode] = useState<'satellite' | 'impact'>(() => readMode());
+
+  useEffect(() => {
+    const syncModeFromUrl = () => setMode(readMode());
+    window.addEventListener('popstate', syncModeFromUrl);
+    return () => window.removeEventListener('popstate', syncModeFromUrl);
+  }, []);
+
+  const changeMode = (nextMode: 'satellite' | 'impact') => {
+    const url = new URL(window.location.href);
+    if (nextMode === 'impact') url.searchParams.set('view', 'impact');
+    else url.searchParams.delete('view');
+    window.history.pushState({}, '', url);
+    setMode(nextMode);
+  };
+
+  return mode === 'satellite' ? (
+    <SatelliteWatch onMode={() => changeMode('impact')} />
+  ) : (
+    <ImpactWatch onMode={() => changeMode('satellite')} />
+  );
+}
+
+function readMode(): 'satellite' | 'impact' {
+  return new URLSearchParams(window.location.search).get('view') === 'impact'
+    ? 'impact'
+    : 'satellite';
 }
