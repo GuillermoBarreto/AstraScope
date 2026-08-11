@@ -24,8 +24,10 @@ except ModuleNotFoundError:  # pragma: no cover - supports repository-root impor
 
 try:
     from app.core.config import settings
+    from app.data.satellite_metadata import enrich_satellite
 except ModuleNotFoundError:  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
+    from backend.app.data.satellite_metadata import enrich_satellite
 
 app = FastAPI(title="AstraScope API", version="0.2.0")
 app.include_router(impact_router)
@@ -50,7 +52,7 @@ CACHE_FILE = Path(__file__).resolve().parent / ".cache" / "active-satellites.jso
 CACHE_SECONDS = 2 * 60 * 60
 FAILURE_RETRY_SECONDS = 5 * 60
 CELESTRAK_TIMEOUT_SECONDS = 120
-CACHE_SCHEMA_VERSION = 3
+CACHE_SCHEMA_VERSION = 4
 last_failure_at = 0.0
 last_failure_error: str | None = None
 
@@ -128,7 +130,7 @@ def normalize(entry: dict[str, Any]) -> dict[str, Any]:
     norad_id = int(entry.get("NORAD_CAT_ID") or 0)
     mean_motion = float(entry.get("MEAN_MOTION") or 1)
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "satellite"
-    return {
+    return enrich_satellite({
         "id": f"{slug}-{norad_id}",
         "name": name,
         "noradId": norad_id,
@@ -149,7 +151,7 @@ def normalize(entry: dict[str, Any]) -> dict[str, Any]:
         "purpose": identify_purpose(name),
         "countryCode": str(entry.get("COUNTRY_CODE", "Unknown")),
         "objectType": str(entry.get("OBJECT_TYPE", "Payload")).title(),
-    }
+    })
 
 
 def tle_epoch(value: str) -> str:
@@ -178,7 +180,7 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
     norad_id = int(entry.get("norad_cat_id") or line1[2:7])
     mean_motion = float(line2[52:63])
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "satellite"
-    return {
+    return enrich_satellite({
         "id": f"{slug}-{norad_id}",
         "name": name,
         "noradId": norad_id,
@@ -201,7 +203,7 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
         "purpose": identify_purpose(name),
         "countryCode": "Unknown",
         "objectType": "Payload",
-    }
+    })
 
 
 def read_disk_cache() -> tuple[list[dict[str, Any]], str, str] | None:

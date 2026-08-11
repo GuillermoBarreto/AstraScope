@@ -48,9 +48,9 @@ function getSatrec(satellite: Satellite) {
 
 function state(satellite: Satellite, date: Date) {
   const result = propagate(getSatrec(satellite), date);
-  if (!result) return null;
+  if (!result || typeof result.position === 'boolean') return null;
   const gmst = gstime(date);
-  return { positionEci: result.position, positionEcf: eciToEcf(result.position, gmst), gmst };
+  return { positionEci: result.position, positionEcf: eciToEcf(result.position, gmst), velocityEci: result.velocity, gmst };
 }
 
 export function satellitePosition(satellite: Satellite, date: Date): [number, number, number] {
@@ -79,11 +79,23 @@ export function satelliteGeodetic(satellite: Satellite, date: Date) {
 }
 
 export function altitudeKm(satellite: Satellite, date = new Date()) {
-  return Math.round(satelliteGeodetic(satellite, date)?.altitude ?? 0);
+  const altitude = satelliteGeodetic(satellite, date)?.altitude;
+  return altitude == null || !Number.isFinite(altitude) ? null : Math.round(altitude);
+}
+
+export function orbitalPeriodMinutes(meanMotion: number): number | null {
+  return Number.isFinite(meanMotion) && meanMotion > 0 ? 1440 / meanMotion : null;
+}
+
+export function satelliteVelocityKmS(satellite: Satellite, date = new Date()): number | null {
+  const velocity = state(satellite, date)?.velocityEci;
+  if (!velocity || typeof velocity === 'boolean') return null;
+  const speed = Math.hypot(velocity.x, velocity.y, velocity.z);
+  return Number.isFinite(speed) ? speed : null;
 }
 
 export function orbitalMetrics(satellite: Satellite, date = new Date()) {
-  const periodMinutes = 1440 / satellite.meanMotion;
+  const periodMinutes = orbitalPeriodMinutes(satellite.meanMotion) ?? 0;
   const periodSeconds = periodMinutes * 60;
   const semiMajorAxisKm = Math.cbrt(EARTH_GRAVITATIONAL_PARAMETER * (periodSeconds / (2 * Math.PI)) ** 2);
   const altitude = satelliteGeodetic(satellite, date)?.altitude ?? semiMajorAxisKm - EARTH_RADIUS_KM;

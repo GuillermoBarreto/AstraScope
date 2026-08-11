@@ -25,6 +25,14 @@ AstraScope is an interactive space-monitoring platform built with React, Three.j
 - split Vercel frontend and Render API deployment configuration
 - Impact Watch for upcoming near-Earth object approaches, potentially hazardous classifications, and recent atmospheric fireballs
 
+## Satellite Details v2
+
+Selecting a spacecraft opens a responsive detail panel with its propagated position and velocity, orbital period, identifiers, operator/category data, orbital-element epoch, and curated launch details when those facts are available. The selected marker and orbit are emphasized in the 3D view, and **Focus satellite** performs a smooth, temporary camera move while preserving normal orbit controls afterward.
+
+Actions include favorite/unfavorite (stored locally with existing AstraScope keys and legacy OrbiWatch migration), view orbit, copy a canonical `?satellite=…` share link, and open an authoritative source. When an observer location is set, the panel shows the next passes above 10°, including rise/set time, duration, maximum elevation, and a conservative potential-visibility classification based on illumination and twilight data.
+
+Imagery is deliberately limited to a reviewed metadata map for notable spacecraft and families (ISS, Hubble, Landsat, NOAA, GPS, Starlink, and Sentinel). Verified imagery includes an explicit credit and source link. Other objects use compact category-based AstraScope fallback artwork; the same fallback replaces any image that fails to load. Metadata is static and cached with the catalog—AstraScope does not scrape image search or invent missing launch facts. Public orbital catalogs remain incomplete, propagated positions become less reliable as elements age, and generic constellation descriptions do not identify an individual spacecraft's exact mission.
+
 ## Impact Watch
 
 Use the in-app mode selector to switch between Satellite Watch and Impact Watch. The selected view is reflected in the URL (`?view=impact`), so Impact Watch can be bookmarked or shared and browser Back/Forward navigation works as expected. Impact Watch displays NASA/JPL NeoWs close approaches for the next seven days and CNEOS fireball records for selectable recent periods. It includes hazardous-classification, date, diameter, energy, and coordinate-availability filters. Fireballs with reported coordinates are plotted on the existing globe; events without coordinates remain available in the list.
