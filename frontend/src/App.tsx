@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Scene } from '@/components/Scene/Scene';
 import type { Observer, Satellite, SatelliteResponse } from '@/types/satellite';
 import { apiUrl } from '@/utils/api';
-import { altitudeKm, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
+import { altitudeKm, compassDirection, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
 import { canonicalSatelliteUrl, formatPeriod, formatVelocity, fallbackKind } from '@/utils/satelliteDetails';
 import { ImpactWatch, ModeSelector } from '@/components/Impact/ImpactWatch';
 
@@ -10,7 +10,7 @@ const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
 const SPEEDS = [0, 1, 10, 60, 600];
 const PRESETS = [
   'All missions',
-  'Favorites',
+  'Watchlist',
   'Crewed',
   'Broadband',
   'Navigation',
@@ -36,7 +36,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [preset, setPreset] = useState<Preset>('All missions');
   const [sort, setSort] = useState<Sort>('Name');
   const [favorites, setFavorites] = useState<Set<string>>(() => readFavorites());
-  const [followSelected, setFollowSelected] = useState(false);
+  const [cameraMode, setCameraMode] = useState<'earth' | 'focus' | 'follow'>('earth');
   const [status, setStatus] = useState<'loading' | 'live' | 'offline'>('loading');
   const [source, setSource] = useState<SatelliteResponse['source']>('unavailable');
   const [upstream, setUpstream] = useState<SatelliteResponse['upstream']>(null);
@@ -160,7 +160,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
 
   const selectSatellite = (id: string | null) => {
     setSelectedId(id);
-    setFollowSelected(false);
+    setCameraMode('earth');
     const url = new URL(window.location.href);
     if (id) url.searchParams.set('satellite', id);
     else url.searchParams.delete('satellite');
@@ -247,7 +247,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                     className={`rounded-full border px-3 py-1.5 text-xs transition ${preset === item ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-700 bg-slate-900 text-slate-400 hover:border-cyan-700 hover:text-cyan-300'}`}
                   >
                     {item}
-                    {item === 'Favorites' ? ` (${favorites.size})` : ''}
+                    {item === 'Watchlist' ? ` (${favorites.size})` : ''}
                   </button>
                 ))}
               </div>
@@ -268,8 +268,9 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               time={simulationTime}
               observer={observer}
               simulationMode={speed !== 1}
-              followSelected={followSelected}
-              onFocusComplete={() => setFollowSelected(false)}
+              cameraMode={cameraMode}
+              onFocusComplete={() => setCameraMode('earth')}
+              onExitFollow={() => setCameraMode('earth')}
             />
             </div>
             <TimeControls
@@ -298,9 +299,10 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 time={simulationTime}
                 observer={observer}
                 favorite={favorites.has(selected.id)}
-                following={followSelected}
+                cameraMode={cameraMode}
                 onFavorite={() => toggleFavorite(selected.id)}
-                onFollow={() => setFollowSelected(true)}
+                onFocus={() => setCameraMode('focus')}
+                onFollow={() => setCameraMode((mode) => mode === 'follow' ? 'earth' : 'follow')}
                 onClose={() => selectSatellite(null)}
               />
             ) : (
@@ -311,6 +313,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 onSelect={selectSatellite}
               />
             )}
+            <Watchlist satellites={catalog.filter((satellite) => favorites.has(satellite.id))} onSelect={selectSatellite} onRemove={toggleFavorite} />
             <ObserverPanel observer={observer} onChange={saveObserver} />
           </aside>
         </section>
@@ -509,8 +512,9 @@ function SatelliteDetails({
   time,
   observer,
   favorite,
-  following,
+  cameraMode,
   onFavorite,
+  onFocus,
   onFollow,
   onClose,
 }: {
@@ -518,8 +522,9 @@ function SatelliteDetails({
   time: Date;
   observer: Observer | null;
   favorite: boolean;
-  following: boolean;
+  cameraMode: 'earth' | 'focus' | 'follow';
   onFavorite: () => void;
+  onFocus: () => void;
   onFollow: () => void;
   onClose: () => void;
 }) {
@@ -573,14 +578,16 @@ function SatelliteDetails({
           onClick={onFavorite}
           className={`rounded-lg border px-2 py-2 text-xs ${favorite ? 'border-amber-400/50 bg-amber-400/10 text-amber-300' : 'border-slate-700 text-slate-300'}`}
         >
-          {favorite ? '★ Saved' : '☆ Favorite'}
+          {favorite ? '★ In Watchlist' : '☆ Add to Watchlist'}
         </button>
         <button
-          onClick={onFollow}
-          className={`rounded-lg border px-2 py-2 text-xs ${following ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-700 text-slate-300'}`}
+          onClick={onFocus}
+          disabled={cameraMode === 'focus'}
+          className={`rounded-lg border px-2 py-2 text-xs ${cameraMode === 'focus' ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-700 text-slate-300'}`}
         >
-          {following ? 'Focusing…' : 'Focus satellite'}
+          {cameraMode === 'focus' ? 'Focusing…' : 'Focus'}
         </button>
+        <button onClick={onFollow} aria-pressed={cameraMode === 'follow'} className={`rounded-lg border px-2 py-2 text-xs ${cameraMode === 'follow' ? 'border-amber-400 bg-amber-400 text-slate-950' : 'border-slate-700 text-slate-300'}`}>{cameraMode === 'follow' ? 'Exit follow' : 'Follow'}</button>
         <button onClick={() => document.getElementById('satellite-scene')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="rounded-lg border border-slate-700 px-2 py-2 text-xs text-slate-300 hover:border-cyan-500">
           View orbit
         </button>
@@ -591,7 +598,7 @@ function SatelliteDetails({
         >
           {shared ? 'Copied!' : 'Copy share link'}
         </button>
-        <a href={satellite.sourceUrl ?? `https://celestrak.org/NORAD/elements/gp.php?CATNR=${satellite.noradId}&FORMAT=json`} target="_blank" rel="noreferrer" className="col-span-2 rounded-lg border border-slate-700 px-2 py-2 text-center text-xs text-slate-300 hover:border-cyan-500">
+        <a href={satellite.sourceUrl ?? `https://celestrak.org/NORAD/elements/gp.php?CATNR=${satellite.noradId}&FORMAT=json`} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-700 px-2 py-2 text-center text-xs text-slate-300 hover:border-cyan-500">
           Open source data ↗
         </a>
       </div>
@@ -615,7 +622,7 @@ function SatelliteDetails({
         <Detail label="Orbital data epoch" value={epoch && !Number.isNaN(epoch.getTime()) ? epoch.toLocaleString() : 'Not available'} />
       </dl>
       {epochAgeDays != null && epochAgeDays > 7 && <p role="status" className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">Orbital elements are {Math.floor(epochAgeDays)} days old; current propagation may be stale.</p>}
-      {observer && (
+      {observer ? (
         <div className="mt-6 border-t border-slate-800 pt-5">
           <h3 className="text-sm font-semibold">Passes over {observer.label}</h3>
           {passes.length ? (
@@ -633,7 +640,7 @@ function SatelliteDetails({
                     <span className="text-amber-300">{pass.maxElevation.toFixed(0)}° peak</span>
                   </div>
                   <p className="mt-1 text-slate-500">
-                    {pass.rise.toLocaleDateString()} · {Math.max(1, Math.round((pass.set.getTime() - pass.rise.getTime()) / 60_000))} min · {Math.round(pass.rangeKm).toLocaleString()} km ·{' '}
+                    {pass.rise.toLocaleDateString()} · {Math.max(1, Math.round((pass.set.getTime() - pass.rise.getTime()) / 60_000))} min · {compassDirection(pass.riseAzimuth)} → {compassDirection(pass.setAzimuth)} · {Math.round(pass.rangeKm).toLocaleString()} km ·{' '}
                     <span className={pass.visible ? 'text-emerald-400' : ''}>
                       {pass.visible ? 'potentially visible' : 'daylight/shadow'}
                     </span>
@@ -645,11 +652,45 @@ function SatelliteDetails({
             <p className="mt-2 text-xs text-slate-500">No passes above 10° in the next 24 hours.</p>
           )}
         </div>
-      )}
+      ) : <div className="mt-6 border-t border-slate-800 pt-5"><h3 className="text-sm font-semibold">Next pass over you</h3><p className="mt-2 text-xs text-slate-500">Set your location to calculate upcoming passes.</p></div>}
       <p className="mt-6 border-t border-slate-800 pt-5 text-xs leading-5 text-slate-500">
         Positions use SGP4/SDP4 public orbital elements. Not for navigation or collision avoidance.
       </p>
     </article>
+  );
+}
+
+function Watchlist({
+  satellites,
+  onSelect,
+  onRemove,
+}: {
+  satellites: Satellite[];
+  onSelect: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <section aria-labelledby="watchlist-title" className="mt-6 border-t border-slate-800 pt-5">
+      <div className="flex items-center justify-between">
+        <h3 id="watchlist-title" className="text-sm font-semibold">Watchlist</h3>
+        <span className="text-xs text-slate-500">{satellites.length} saved</span>
+      </div>
+      {satellites.length ? (
+        <ul className="mt-3 space-y-2">
+          {satellites.map((satellite) => (
+            <li key={satellite.id} className="flex overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60">
+              <button onClick={() => onSelect(satellite.id)} className="min-w-0 flex-1 px-3 py-2 text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-cyan-400">
+                <span className="block truncate text-xs font-medium text-slate-200">{satellite.name}</span>
+                <span className="block truncate text-[10px] text-slate-500">NORAD {satellite.noradId} · {satellite.purpose}</span>
+              </button>
+              <button aria-label={`Remove ${satellite.name} from Watchlist`} onClick={() => onRemove(satellite.id)} className="px-3 text-amber-300 hover:bg-amber-400/10 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-amber-300">★</button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs leading-5 text-slate-500">Save satellites to return to them quickly. Your Watchlist stays on this device.</p>
+      )}
+    </section>
   );
 }
 
@@ -765,7 +806,7 @@ function readFavorites(): Set<string> {
 
 function matchesPreset(satellite: Satellite, preset: Preset, favorites: Set<string>): boolean {
   if (preset === 'All missions') return true;
-  if (preset === 'Favorites') return favorites.has(satellite.id);
+  if (preset === 'Watchlist') return favorites.has(satellite.id);
   if (preset === 'Crewed') return satellite.purpose === 'Crewed station';
   return satellite.purpose === preset;
 }

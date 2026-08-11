@@ -25,11 +25,11 @@ AstraScope is an interactive space-monitoring platform built with React, Three.j
 - split Vercel frontend and Render API deployment configuration
 - Impact Watch for upcoming near-Earth object approaches, potentially hazardous classifications, and recent atmospheric fireballs
 
-## Satellite Details v2
+## Satellite Experience
 
 Selecting a spacecraft opens a responsive detail panel with its propagated position and velocity, orbital period, identifiers, operator/category data, orbital-element epoch, and curated launch details when those facts are available. The selected marker and orbit are emphasized in the 3D view, and **Focus satellite** performs a smooth, temporary camera move while preserving normal orbit controls afterward.
 
-Actions include favorite/unfavorite (stored locally with existing AstraScope keys and legacy OrbiWatch migration), view orbit, copy a canonical `?satellite=…` share link, and open an authoritative source. When an observer location is set, the panel shows the next passes above 10°, including rise/set time, duration, maximum elevation, and a conservative potential-visibility classification based on illumination and twilight data.
+Actions include a smooth one-shot focus, continuous follow mode with an explicit exit, Watchlist add/remove, view orbit, copy a canonical `?satellite=…` share link, and open an authoritative source. The device-local Watchlist uses existing AstraScope storage and legacy OrbiWatch migration, and provides a compact saved-satellite list with name, NORAD ID, and category. When an observer location is set, the panel shows the next passes above 10°, including rise/set time, duration, maximum elevation, and propagated rise/set directions. Potential visibility remains a conservative classification based on illumination and twilight data.
 
 Imagery is deliberately limited to a reviewed metadata map for notable spacecraft and families (ISS, Hubble, Landsat, NOAA, GPS, Starlink, and Sentinel). Verified imagery includes an explicit credit and source link. Other objects use compact category-based AstraScope fallback artwork; the same fallback replaces any image that fails to load. Metadata is static and cached with the catalog—AstraScope does not scrape image search or invent missing launch facts. Public orbital catalogs remain incomplete, propagated positions become less reliable as elements age, and generic constellation descriptions do not identify an individual spacecraft's exact mission.
 

@@ -43,6 +43,8 @@ export type SatellitePass = {
   maxElevation: number;
   rangeKm: number;
   visible: boolean;
+  riseAzimuth: number;
+  setAzimuth: number;
 };
 
 export type SatelliteResponse = {

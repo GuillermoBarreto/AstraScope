@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Satellite } from '@/types/satellite';
-import { orbitalMetrics, orbitalPeriodMinutes, satelliteGeodetic, satellitePosition, satelliteVelocityKmS, sunScenePosition } from '@/utils/orbit';
+import { compassDirection, orbitalMetrics, orbitalPeriodMinutes, satelliteGeodetic, satellitePosition, satelliteVelocityKmS, sunScenePosition } from '@/utils/orbit';
 
 const iss: Satellite = {
   id: 'iss-25544', name: 'ISS', noradId: 25544, objectId: '1998-067A',
@@ -38,5 +38,11 @@ describe('SGP4 orbit utilities', () => {
     expect(orbitalPeriodMinutes(iss.meanMotion)).toBeCloseTo(92.94, 1);
     expect(orbitalPeriodMinutes(0)).toBeNull();
     expect(satelliteVelocityKmS(iss, new Date('2026-08-02T12:10:00Z'))).toBeGreaterThan(7);
+  });
+
+  it('formats pass azimuths as compass directions', () => {
+    expect(compassDirection(0)).toBe('N');
+    expect(compassDirection(225)).toBe('SW');
+    expect(compassDirection(359)).toBe('N');
   });
 });
