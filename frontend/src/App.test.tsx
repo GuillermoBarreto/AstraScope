@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
 vi.mock('@/components/Scene/Scene', () => ({
-  Scene: () => <div aria-label="3D Earth scene" />,
+  Scene: ({ cameraMode, onFocusComplete, onExitFollow }: { cameraMode: string; onFocusComplete: () => void; onExitFollow: () => void }) => <div aria-label="3D Earth scene" data-camera-mode={cameraMode}>{cameraMode === 'focus' && <button onClick={onFocusComplete}>Complete focus</button>}{cameraMode === 'follow' && <button onClick={onExitFollow}>Exit follow from scene</button>}</div>,
 }));
 vi.mock('@/components/Impact/ImpactScene', () => ({
   ImpactScene: () => <div aria-label="Impact globe" />,
@@ -34,10 +34,21 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'ISS (ZARYA)' })).toBeInTheDocument();
     expect(screen.getByText('A crewed research laboratory.')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /satellite illustration/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '☆ Favorite' }));
+    expect(screen.getByText('Set your location to calculate upcoming passes.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '☆ Add to Watchlist' }));
     await waitFor(() => expect(JSON.parse(localStorage.getItem('astrascope-favorites') ?? '[]')).toContain('iss-25544'));
+    expect(screen.getByText('1 saved')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Focus' }));
+    expect(screen.getByLabelText('3D Earth scene')).toHaveAttribute('data-camera-mode', 'focus');
+    fireEvent.click(screen.getByRole('button', { name: 'Complete focus' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Follow' }));
+    expect(screen.getByLabelText('3D Earth scene')).toHaveAttribute('data-camera-mode', 'follow');
+    fireEvent.click(screen.getByRole('button', { name: 'Exit follow from scene' }));
+    expect(screen.getByLabelText('3D Earth scene')).toHaveAttribute('data-camera-mode', 'earth');
     fireEvent.click(screen.getByRole('button', { name: 'Copy share link' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('satellite=iss-25544')));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove ISS (ZARYA) from Watchlist' }));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('astrascope-favorites') ?? '[]')).not.toContain('iss-25544'));
   });
 
   it('renders the AstraScope globe experience', () => {

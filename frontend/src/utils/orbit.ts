@@ -160,8 +160,9 @@ export function predictPasses(satellite: Satellite, observer: Observer, start: D
     const look = ecfToLookAngles(observerGd, result.positionEcf);
     const elevation = look.elevation * 180 / Math.PI;
     if (elevation >= 10) {
-      if (!current) current = { rise: date, peak: date, set: date, maxElevation: elevation, rangeKm: look.rangeSat, visible: false };
+      if (!current) current = { rise: date, peak: date, set: date, maxElevation: elevation, rangeKm: look.rangeSat, visible: false, riseAzimuth: look.azimuth * 180 / Math.PI, setAzimuth: look.azimuth * 180 / Math.PI };
       current.set = date;
+      current.setAzimuth = look.azimuth * 180 / Math.PI;
       if (elevation > current.maxElevation) {
         current.peak = date;
         current.maxElevation = elevation;
@@ -179,6 +180,12 @@ export function predictPasses(satellite: Satellite, observer: Observer, start: D
   }
   if (current && passes.length < 3) passes.push(current);
   return passes;
+}
+
+export function compassDirection(azimuth: number): string {
+  if (!Number.isFinite(azimuth)) return '—';
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return directions[Math.round(((azimuth % 360) + 360) % 360 / 45) % directions.length];
 }
 
 function isSunlit(satellite: { x: number; y: number; z: number }, sun: { x: number; y: number; z: number }) {
