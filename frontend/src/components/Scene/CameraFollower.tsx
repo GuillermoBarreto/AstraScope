@@ -8,9 +8,10 @@ type CameraFollowerProps = {
   satellite: Satellite | null;
   time: Date;
   enabled: boolean;
+  onComplete: () => void;
 };
 
-export function CameraFollower({ satellite, time, enabled }: CameraFollowerProps) {
+export function CameraFollower({ satellite, time, enabled, onComplete }: CameraFollowerProps) {
   const { camera } = useThree();
   const target = useMemo(() => new THREE.Vector3(), []);
   const desired = useMemo(() => new THREE.Vector3(), []);
@@ -21,6 +22,7 @@ export function CameraFollower({ satellite, time, enabled }: CameraFollowerProps
     desired.copy(target).normalize().multiplyScalar(1.6).add(target);
     camera.position.lerp(desired, 0.08);
     camera.lookAt(target);
+    if (camera.position.distanceTo(desired) < 0.03) onComplete();
   });
 
   return null;

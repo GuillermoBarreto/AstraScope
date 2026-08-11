@@ -1,5 +1,6 @@
 import backend.main as main
 from backend.main import api_root, health_check, identify_operator, identify_purpose, normalize_satnogs, orbit_class
+from backend.app.data.satellite_metadata import curated_metadata
 from backend.app.core.config import Settings
 
 
@@ -26,6 +27,18 @@ def test_catalog_classification() -> None:
     assert orbit_class(15.5) == "LEO"
     assert orbit_class(2.0) == "MEO"
     assert orbit_class(1.0) == "GEO"
+
+
+def test_curated_metadata_has_trusted_media_provenance() -> None:
+    iss = curated_metadata("ISS (ZARYA)")
+    assert iss["description"].startswith("The International Space Station")
+    assert iss["imageUrl"].startswith("https://commons.wikimedia.org/")
+    assert iss["imageCredit"]
+    assert iss["imageSourceUrl"].startswith("https://commons.wikimedia.org/")
+
+
+def test_unknown_spacecraft_is_not_enriched_with_guesses() -> None:
+    assert curated_metadata("UNKNOWN PAYLOAD 42") == {}
 
 
 def test_api_root_identifies_service() -> None:

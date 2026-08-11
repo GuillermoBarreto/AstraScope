@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Scene } from '@/components/Scene/Scene';
 import type { Observer, Satellite, SatelliteResponse } from '@/types/satellite';
 import { apiUrl } from '@/utils/api';
-import { altitudeKm, orbitalMetrics, predictPasses, satelliteGeodetic } from '@/utils/orbit';
+import { altitudeKm, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
+import { canonicalSatelliteUrl, formatPeriod, formatVelocity, fallbackKind } from '@/utils/satelliteDetails';
 import { ImpactWatch, ModeSelector } from '@/components/Impact/ImpactWatch';
 
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
@@ -259,6 +260,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 </button>
               )}
             </div>
+            <div id="satellite-scene">
             <Scene
               satellites={filtered}
               selectedId={selectedId}
@@ -267,7 +269,9 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               observer={observer}
               simulationMode={speed !== 1}
               followSelected={followSelected}
+              onFocusComplete={() => setFollowSelected(false)}
             />
+            </div>
             <TimeControls
               time={simulationTime}
               speed={speed}
@@ -287,7 +291,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
             </div>
           </div>
 
-          <aside className="rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5 backdrop-blur xl:sticky xl:top-5 xl:self-start">
+          <aside aria-label={selected ? 'Satellite details' : 'Satellite catalog'} className="min-w-0 rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5 backdrop-blur xl:sticky xl:top-5 xl:max-h-[calc(100vh-2.5rem)] xl:self-start xl:overflow-y-auto">
             {selected ? (
               <SatelliteDetails
                 satellite={selected}
@@ -296,7 +300,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 favorite={favorites.has(selected.id)}
                 following={followSelected}
                 onFavorite={() => toggleFavorite(selected.id)}
-                onFollow={() => setFollowSelected((value) => !value)}
+                onFollow={() => setFollowSelected(true)}
                 onClose={() => selectSatellite(null)}
               />
             ) : (
@@ -520,29 +524,51 @@ function SatelliteDetails({
   onClose: () => void;
 }) {
   const [shared, setShared] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [satellite.id]);
   const location = satelliteGeodetic(satellite, time);
   const metrics = orbitalMetrics(satellite, time);
+  const altitude = altitudeKm(satellite, time);
+  const velocity = satelliteVelocityKmS(satellite, time);
+  const period = orbitalPeriodMinutes(satellite.meanMotion);
+  const epoch = satellite.epoch ? new Date(satellite.epoch) : null;
+  const epochAgeDays = epoch && !Number.isNaN(epoch.getTime()) ? (Date.now() - epoch.getTime()) / 86_400_000 : null;
   const passStart = Math.floor(time.getTime() / 60_000) * 60_000;
   const passes = useMemo(
     () => (observer ? predictPasses(satellite, observer, new Date(passStart)) : []),
     [observer, satellite, passStart],
   );
   const share = async () => {
-    await navigator.clipboard?.writeText(window.location.href);
+    await navigator.clipboard?.writeText(canonicalSatelliteUrl(satellite));
     setShared(true);
     window.setTimeout(() => setShared(false), 1800);
   };
   return (
-    <>
+    <article aria-labelledby="satellite-details-title">
       <button onClick={onClose} className="text-xs text-cyan-400 hover:text-cyan-300">
         ← Back to catalog
       </button>
       <p className="mt-6 text-xs uppercase tracking-[0.25em] text-cyan-400">Selected object</p>
-      <h2 className="mt-2 break-words text-3xl font-semibold">{satellite.name}</h2>
+      <h2 id="satellite-details-title" className="mt-2 break-words text-3xl font-semibold">{satellite.name}</h2>
       <p className="mt-2 text-sm text-slate-400">
         {satellite.operator} · {satellite.purpose}
       </p>
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-cyan-950/60 via-slate-950 to-violet-950/50">
+        {satellite.imageUrl && !imageFailed ? (
+          <img src={satellite.imageUrl} alt={satellite.imageAlt ?? satellite.name} onError={() => setImageFailed(true)} className="h-40 w-full object-cover sm:h-48" />
+        ) : (
+          <div role="img" aria-label={`${satellite.purpose || fallbackKind(satellite)} satellite illustration`} className="grid h-36 place-items-center bg-[radial-gradient(circle,rgba(34,211,238,0.18),transparent_60%)]">
+            <span className="text-6xl" aria-hidden="true">🛰️</span>
+            <span className="sr-only">Category fallback artwork</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 px-3 py-2 text-[10px] text-slate-500">
+          <span>{satellite.imageCredit ?? `${satellite.purpose || 'AstraScope'} fallback artwork`}</span>
+          {satellite.imageSourceUrl && !imageFailed && <a href={satellite.imageSourceUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">Image source</a>}
+        </div>
+      </div>
+      {satellite.description && <p className="mt-4 text-sm leading-6 text-slate-300">{satellite.description}</p>}
+      <div className="mt-4 grid grid-cols-2 gap-2">
         <button
           onClick={onFavorite}
           className={`rounded-lg border px-2 py-2 text-xs ${favorite ? 'border-amber-400/50 bg-amber-400/10 text-amber-300' : 'border-slate-700 text-slate-300'}`}
@@ -553,30 +579,42 @@ function SatelliteDetails({
           onClick={onFollow}
           className={`rounded-lg border px-2 py-2 text-xs ${following ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-700 text-slate-300'}`}
         >
-          {following ? 'Following' : 'Follow'}
+          {following ? 'Focusing…' : 'Focus satellite'}
+        </button>
+        <button onClick={() => document.getElementById('satellite-scene')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="rounded-lg border border-slate-700 px-2 py-2 text-xs text-slate-300 hover:border-cyan-500">
+          View orbit
         </button>
         <button
           onClick={share}
           aria-live="polite"
           className={`rounded-lg border px-2 py-2 text-xs ${shared ? 'border-emerald-400/50 text-emerald-300' : 'border-slate-700 text-slate-300'}`}
         >
-          {shared ? 'Copied!' : 'Share'}
+          {shared ? 'Copied!' : 'Copy share link'}
         </button>
+        <a href={satellite.sourceUrl ?? `https://celestrak.org/NORAD/elements/gp.php?CATNR=${satellite.noradId}&FORMAT=json`} target="_blank" rel="noreferrer" className="col-span-2 rounded-lg border border-slate-700 px-2 py-2 text-center text-xs text-slate-300 hover:border-cyan-500">
+          Open source data ↗
+        </a>
       </div>
       <dl className="mt-6 grid grid-cols-2 gap-3">
         <Detail label="NORAD ID" value={String(satellite.noradId)} />
+        <Detail label="International designator" value={satellite.objectId || 'Not available'} />
         <Detail label="Orbit" value={satellite.orbit} />
-        <Detail label="Altitude" value={`${altitudeKm(satellite, time).toLocaleString()} km`} />
-        <Detail label="Speed" value={`${metrics.speedKmS.toFixed(2)} km/s`} />
-        <Detail label="Period" value={`${metrics.periodMinutes.toFixed(1)} min`} />
-        <Detail label="Perigee" value={`${Math.round(metrics.perigeeKm).toLocaleString()} km`} />
-        <Detail label="Apogee" value={`${Math.round(metrics.apogeeKm).toLocaleString()} km`} />
+        <Detail label="Altitude" value={altitude == null ? 'Not available' : `${altitude.toLocaleString()} km`} />
+        <Detail label="Velocity" value={formatVelocity(velocity)} />
+        <Detail label="Orbital period" value={formatPeriod(period)} />
+        <Detail label="Perigee" value={Number.isFinite(metrics.perigeeKm) ? `${Math.round(metrics.perigeeKm).toLocaleString()} km` : 'Not available'} />
+        <Detail label="Apogee" value={Number.isFinite(metrics.apogeeKm) ? `${Math.round(metrics.apogeeKm).toLocaleString()} km` : 'Not available'} />
         <Detail label="Inclination" value={`${satellite.inclination.toFixed(1)}°`} />
         <Detail label="Latitude" value={location ? `${location.latitude.toFixed(2)}°` : '—'} />
         <Detail label="Longitude" value={location ? `${location.longitude.toFixed(2)}°` : '—'} />
         <Detail label="Object" value={satellite.objectType} />
         <Detail label="Country" value={satellite.countryCode} />
+        {satellite.launchDate && <Detail label="Launch date" value={new Date(`${satellite.launchDate}T00:00:00Z`).toLocaleDateString()} />}
+        {satellite.launchVehicle && <Detail label="Launch vehicle" value={satellite.launchVehicle} />}
+        {satellite.launchSite && <Detail label="Launch site" value={satellite.launchSite} />}
+        <Detail label="Orbital data epoch" value={epoch && !Number.isNaN(epoch.getTime()) ? epoch.toLocaleString() : 'Not available'} />
       </dl>
+      {epochAgeDays != null && epochAgeDays > 7 && <p role="status" className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">Orbital elements are {Math.floor(epochAgeDays)} days old; current propagation may be stale.</p>}
       {observer && (
         <div className="mt-6 border-t border-slate-800 pt-5">
           <h3 className="text-sm font-semibold">Passes over {observer.label}</h3>
@@ -595,8 +633,7 @@ function SatelliteDetails({
                     <span className="text-amber-300">{pass.maxElevation.toFixed(0)}° peak</span>
                   </div>
                   <p className="mt-1 text-slate-500">
-                    {pass.rise.toLocaleDateString()} · {Math.round(pass.rangeKm).toLocaleString()}{' '}
-                    km ·{' '}
+                    {pass.rise.toLocaleDateString()} · {Math.max(1, Math.round((pass.set.getTime() - pass.rise.getTime()) / 60_000))} min · {Math.round(pass.rangeKm).toLocaleString()} km ·{' '}
                     <span className={pass.visible ? 'text-emerald-400' : ''}>
                       {pass.visible ? 'potentially visible' : 'daylight/shadow'}
                     </span>
@@ -612,7 +649,7 @@ function SatelliteDetails({
       <p className="mt-6 border-t border-slate-800 pt-5 text-xs leading-5 text-slate-500">
         Positions use SGP4/SDP4 public orbital elements. Not for navigation or collision avoidance.
       </p>
-    </>
+    </article>
   );
 }
 

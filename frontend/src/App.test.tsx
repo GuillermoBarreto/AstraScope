@@ -12,6 +12,32 @@ vi.mock('@/components/Impact/ImpactScene', () => ({
 describe('App', () => {
   beforeEach(() => {
     window.history.replaceState({}, '', '/');
+    localStorage.clear();
+  });
+
+  it('renders enriched satellite details, fallback media, favorites, and sharing', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const satellite = {
+      id: 'iss-25544', name: 'ISS (ZARYA)', noradId: 25544, objectId: '1998-067A', epoch: new Date().toISOString(),
+      inclination: 51.6, raan: 0, eccentricity: 0.0007, argPericenter: 0, meanAnomaly: 0, meanMotion: 15.49,
+      bstar: 0, meanMotionDot: 0, meanMotionDdot: 0, elementSetNo: 1, operator: 'NASA', orbit: 'LEO',
+      purpose: 'Crewed station', countryCode: 'US', objectType: 'Payload', description: 'A crewed research laboratory.',
+    };
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(String(input).includes('satellites') ? { satellites: [satellite], total: 1, updatedAt: new Date().toISOString(), source: 'celestrak' } : { status: 'ok' }),
+    })));
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('ISS (ZARYA)')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('ISS (ZARYA)'));
+    expect(screen.getByRole('heading', { name: 'ISS (ZARYA)' })).toBeInTheDocument();
+    expect(screen.getByText('A crewed research laboratory.')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /satellite illustration/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '☆ Favorite' }));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('astrascope-favorites') ?? '[]')).toContain('iss-25544'));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy share link' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('satellite=iss-25544')));
   });
 
   it('renders the AstraScope globe experience', () => {

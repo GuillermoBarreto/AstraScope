@@ -22,9 +22,10 @@ type SceneProps = {
   observer: Observer | null;
   simulationMode: boolean;
   followSelected: boolean;
+  onFocusComplete: () => void;
 };
 
-export function Scene({ satellites, selectedId, onSelect, time, observer, simulationMode, followSelected }: SceneProps) {
+export function Scene({ satellites, selectedId, onSelect, time, observer, simulationMode, followSelected, onFocusComplete }: SceneProps) {
   const selected = satellites.find((satellite) => satellite.id === selectedId) ?? null;
   const sunPosition = useMemo(() => sunScenePosition(time), [time]);
   return (
@@ -40,7 +41,7 @@ export function Scene({ satellites, selectedId, onSelect, time, observer, simula
         <Moon time={time} />
         <Satellites satellites={satellites} selectedId={selectedId} onSelect={onSelect} time={time} />
         <OrbitOverlay satellite={selected} time={time} observer={observer} />
-        <CameraFollower satellite={selected} time={time} enabled={followSelected} />
+        <CameraFollower satellite={selected} time={time} enabled={followSelected} onComplete={onFocusComplete} />
         <OrbitControls enabled={!followSelected} enableDamping dampingFactor={0.08} enablePan={false} minDistance={2.5} maxDistance={16} autoRotate={false} />
       </Canvas>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_58%,rgba(2,6,23,0.5)_100%)]" />

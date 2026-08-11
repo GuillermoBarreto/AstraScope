@@ -23,6 +23,15 @@ export type Satellite = {
   purpose: string;
   countryCode: string;
   objectType: string;
+  description?: string;
+  launchDate?: string;
+  launchVehicle?: string;
+  launchSite?: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  imageCredit?: string;
+  imageSourceUrl?: string;
+  sourceUrl?: string;
 };
 
 export type Observer = { latitude: number; longitude: number; altitudeKm: number; label: string };
