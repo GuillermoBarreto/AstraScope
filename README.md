@@ -6,6 +6,7 @@ Formerly OrbiWatch.
 
 AstraScope is an interactive space-monitoring platform built with React, Three.js, and FastAPI. Explore Earth's orbital neighborhood and near-space activity in real time through satellite tracking, near-Earth object close approaches, and reconstructed atmospheric fireball events.
 
+adding words for repo
 ## Features
 
 - the complete public CelesTrak active catalog with automatic SatNOGS fallback
