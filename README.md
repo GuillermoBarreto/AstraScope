@@ -20,6 +20,7 @@ adding words for repo
 - current latitude, longitude, altitude, purpose, operator, and catalog metadata
 - saved or device-based observer location
 - upcoming 24-hour pass predictions above 10° elevation
+- Sky Tonight forecast ranking potentially visible Watchlist passes by rise time
 - responsive desktop and mobile interface
 - split Vercel frontend and Render API deployment configuration
 - Impact Watch for upcoming near-Earth object approaches, potentially hazardous classifications, and recent atmospheric fireballs
