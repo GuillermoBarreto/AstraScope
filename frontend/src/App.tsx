@@ -4,6 +4,7 @@ import type { Observer, Satellite, SatelliteResponse } from '@/types/satellite';
 import { apiUrl } from '@/utils/api';
 import { altitudeKm, compassDirection, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
 import { canonicalSatelliteUrl, formatPeriod, formatVelocity, fallbackKind } from '@/utils/satelliteDetails';
+import { skyTonightPasses } from '@/utils/skyTonight';
 import { ImpactWatch, ModeSelector } from '@/components/Impact/ImpactWatch';
 
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
@@ -314,6 +315,12 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               />
             )}
             <Watchlist satellites={catalog.filter((satellite) => favorites.has(satellite.id))} onSelect={selectSatellite} onRemove={toggleFavorite} />
+            <SkyTonight
+              satellites={catalog.filter((satellite) => favorites.has(satellite.id))}
+              observer={observer}
+              time={simulationTime}
+              onSelect={selectSatellite}
+            />
             <ObserverPanel observer={observer} onChange={saveObserver} />
           </aside>
         </section>
@@ -690,6 +697,86 @@ function Watchlist({
       ) : (
         <p className="mt-2 text-xs leading-5 text-slate-500">Save satellites to return to them quickly. Your Watchlist stays on this device.</p>
       )}
+    </section>
+  );
+}
+
+function SkyTonight({
+  satellites,
+  observer,
+  time,
+  onSelect,
+}: {
+  satellites: Satellite[];
+  observer: Observer | null;
+  time: Date;
+  onSelect: (id: string) => void;
+}) {
+  const passStart = Math.floor(time.getTime() / 60_000) * 60_000;
+  const passes = useMemo(
+    () => (observer ? skyTonightPasses(satellites, observer, new Date(passStart)) : []),
+    [observer, passStart, satellites],
+  );
+
+  return (
+    <section aria-labelledby="sky-tonight-title" className="mt-6 border-t border-slate-800 pt-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300">Visible passes</p>
+          <h3 id="sky-tonight-title" className="mt-1 text-sm font-semibold">Sky Tonight</h3>
+        </div>
+        {observer && satellites.length > 0 && (
+          <span className="rounded-full bg-violet-400/10 px-2 py-1 text-[10px] text-violet-200">
+            Next 24 hours
+          </span>
+        )}
+      </div>
+      {!observer ? (
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          Set your observer location below to find visible Watchlist passes.
+        </p>
+      ) : satellites.length === 0 ? (
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          Add satellites to your Watchlist to build a personal viewing forecast.
+        </p>
+      ) : passes.length === 0 ? (
+        <p className="mt-2 rounded-xl border border-dashed border-slate-700 p-3 text-xs leading-5 text-slate-500">
+          No potentially visible Watchlist passes are predicted in the next 24 hours.
+        </p>
+      ) : (
+        <ol className="mt-3 space-y-2">
+          {passes.map((pass) => (
+            <li key={`${pass.satellite.id}-${pass.rise.toISOString()}`}>
+              <button
+                onClick={() => onSelect(pass.satellite.id)}
+                className="w-full rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-left transition hover:border-violet-500/60 hover:bg-violet-950/20 focus:outline-none focus:ring-2 focus:ring-violet-400"
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold text-slate-200">
+                      {pass.satellite.name}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      {pass.rise.toLocaleDateString([], { weekday: 'short' })}{' '}
+                      {pass.rise.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {' · '}{Math.max(1, Math.round((pass.set.getTime() - pass.rise.getTime()) / 60_000))} min
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded-full bg-emerald-400/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
+                    {Math.round(pass.maxElevation)}° peak
+                  </span>
+                </span>
+                <span className="mt-2 block text-[10px] text-slate-500">
+                  {compassDirection(pass.riseAzimuth)} → {compassDirection(pass.setAzimuth)} · potentially visible
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="mt-3 text-[10px] leading-4 text-slate-600">
+        Visibility is an estimate based on satellite illumination and local twilight.
+      </p>
     </section>
   );
 }
