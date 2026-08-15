@@ -5,6 +5,7 @@ import { apiUrl } from '@/utils/api';
 import { altitudeKm, compassDirection, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
 import { canonicalSatelliteUrl, formatPeriod, formatVelocity, fallbackKind } from '@/utils/satelliteDetails';
 import { skyTonightPasses } from '@/utils/skyTonight';
+import { calendarFilename, satellitePassCalendar } from '@/utils/calendar';
 import { ImpactWatch, ModeSelector } from '@/components/Impact/ImpactWatch';
 
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
@@ -717,6 +718,21 @@ function SkyTonight({
     () => (observer ? skyTonightPasses(satellites, observer, new Date(passStart)) : []),
     [observer, passStart, satellites],
   );
+  const addToCalendar = (pass: (typeof passes)[number]) => {
+    if (!observer) return;
+    const calendar = satellitePassCalendar(
+      pass.satellite,
+      pass,
+      observer,
+      canonicalSatelliteUrl(pass.satellite),
+    );
+    const url = URL.createObjectURL(new Blob([calendar], { type: 'text/calendar;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = calendarFilename(pass.satellite, pass);
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
 
   return (
     <section aria-labelledby="sky-tonight-title" className="mt-6 border-t border-slate-800 pt-5">
@@ -747,10 +763,7 @@ function SkyTonight({
         <ol className="mt-3 space-y-2">
           {passes.map((pass) => (
             <li key={`${pass.satellite.id}-${pass.rise.toISOString()}`}>
-              <button
-                onClick={() => onSelect(pass.satellite.id)}
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-left transition hover:border-violet-500/60 hover:bg-violet-950/20 focus:outline-none focus:ring-2 focus:ring-violet-400"
-              >
+              <article className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 transition hover:border-violet-500/60 hover:bg-violet-950/20">
                 <span className="flex items-start justify-between gap-3">
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-semibold text-slate-200">
@@ -769,7 +782,22 @@ function SkyTonight({
                 <span className="mt-2 block text-[10px] text-slate-500">
                   {compassDirection(pass.riseAzimuth)} → {compassDirection(pass.setAzimuth)} · potentially visible
                 </span>
-              </button>
+                <span className="mt-3 flex gap-2 border-t border-slate-800 pt-2">
+                  <button
+                    onClick={() => onSelect(pass.satellite.id)}
+                    className="flex-1 rounded-lg px-2 py-1.5 text-[10px] font-medium text-violet-200 hover:bg-violet-400/10 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                  >
+                    Inspect satellite
+                  </button>
+                  <button
+                    onClick={() => addToCalendar(pass)}
+                    aria-label={`Add ${pass.satellite.name} pass to calendar`}
+                    className="flex-1 rounded-lg bg-cyan-400/10 px-2 py-1.5 text-[10px] font-medium text-cyan-200 hover:bg-cyan-400/20 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                  >
+                    Add to calendar
+                  </button>
+                </span>
+              </article>
             </li>
           ))}
         </ol>

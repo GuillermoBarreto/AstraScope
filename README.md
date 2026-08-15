@@ -21,6 +21,7 @@ adding words for repo
 - saved or device-based observer location
 - upcoming 24-hour pass predictions above 10° elevation
 - Sky Tonight forecast ranking potentially visible Watchlist passes by rise time
+- downloadable calendar reminders for predicted visible passes
 - responsive desktop and mobile interface
 - split Vercel frontend and Render API deployment configuration
 - Impact Watch for upcoming near-Earth object approaches, potentially hazardous classifications, and recent atmospheric fireballs
