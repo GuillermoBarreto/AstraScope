@@ -15,6 +15,7 @@ adding words for repo
 - SGP4/SDP4 propagation from OMM and TLE orbital elements
 - GPU-instanced rendering for thousands of spacecraft
 - operator, orbit-class, name, and NORAD filtering
+- side-by-side comparison of live orbital and mission data
 - pause, real time, and accelerated simulation up to 600×
 - selected-satellite ground track and coverage footprint
 - current latitude, longitude, altitude, purpose, operator, and catalog metadata
