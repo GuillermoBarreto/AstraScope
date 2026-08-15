@@ -5,7 +5,6 @@ import { apiUrl } from '@/utils/api';
 import { altitudeKm, compassDirection, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
 import { canonicalSatelliteUrl, formatPeriod, formatVelocity, fallbackKind } from '@/utils/satelliteDetails';
 import { skyTonightPasses } from '@/utils/skyTonight';
-import { calendarFilename, satellitePassCalendar } from '@/utils/calendar';
 import { ImpactWatch, ModeSelector } from '@/components/Impact/ImpactWatch';
 
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
@@ -315,7 +314,13 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 onSelect={selectSatellite}
               />
             )}
-            <Watchlist satellites={catalog.filter((satellite) => favorites.has(satellite.id))} onSelect={selectSatellite} onRemove={toggleFavorite} />
+            <Watchlist
+              satellites={catalog.filter((satellite) => favorites.has(satellite.id))}
+              availableIds={new Set(catalog.map((satellite) => satellite.id))}
+              onSelect={selectSatellite}
+              onRemove={toggleFavorite}
+              onImport={(ids) => setFavorites((current) => new Set([...current, ...ids]))}
+            />
             <SkyTonight
               satellites={catalog.filter((satellite) => favorites.has(satellite.id))}
               observer={observer}
@@ -670,13 +675,41 @@ function SatelliteDetails({
 
 function Watchlist({
   satellites,
+  availableIds,
   onSelect,
   onRemove,
+  onImport,
 }: {
   satellites: Satellite[];
+  availableIds: Set<string>;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
+  onImport: (ids: string[]) => void;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [backupStatus, setBackupStatus] = useState('');
+  const exportWatchlist = () => {
+    const contents = createWatchlistBackup(satellites.map((satellite) => satellite.id));
+    const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `astrascope-watchlist-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setBackupStatus(`Exported ${satellites.length} satellite${satellites.length === 1 ? '' : 's'}.`);
+  };
+  const importWatchlist = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const ids = parseWatchlistBackup(await file.text(), availableIds);
+      onImport(ids);
+      setBackupStatus(`Imported ${ids.length} available satellite${ids.length === 1 ? '' : 's'}.`);
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : 'Could not import this backup.');
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
   return (
     <section aria-labelledby="watchlist-title" className="mt-6 border-t border-slate-800 pt-5">
       <div className="flex items-center justify-between">
@@ -698,6 +731,30 @@ function Watchlist({
       ) : (
         <p className="mt-2 text-xs leading-5 text-slate-500">Save satellites to return to them quickly. Your Watchlist stays on this device.</p>
       )}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button
+          onClick={exportWatchlist}
+          disabled={satellites.length === 0}
+          className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-300 hover:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Export backup
+        </button>
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-300 hover:border-cyan-500"
+        >
+          Import backup
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          aria-label="Choose Watchlist backup"
+          onChange={(event) => void importWatchlist(event.target.files?.[0])}
+          className="sr-only"
+        />
+      </div>
+      {backupStatus && <p role="status" className="mt-2 text-[10px] leading-4 text-cyan-300">{backupStatus}</p>}
     </section>
   );
 }
