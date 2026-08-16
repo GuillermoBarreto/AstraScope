@@ -60,6 +60,37 @@ describe('App', () => {
     expect(screen.getByText(/Explore Earth's orbital neighborhood and near-space activity in real time/i)).toBeInTheDocument();
   });
 
+  it('compares two satellites and opens either detail view', async () => {
+    const baseSatellite = {
+      objectId: '', epoch: new Date().toISOString(), inclination: 51.6, raan: 0,
+      eccentricity: 0.0007, argPericenter: 0, meanAnomaly: 0, meanMotion: 15.49,
+      bstar: 0, meanMotionDot: 0, meanMotionDdot: 0, elementSetNo: 1,
+      operator: 'NASA', orbit: 'LEO', purpose: 'Science', countryCode: 'US', objectType: 'Payload',
+    };
+    const satellites = [
+      { ...baseSatellite, id: 'alpha-1', name: 'ALPHA', noradId: 1 },
+      { ...baseSatellite, id: 'beta-2', name: 'BETA', noradId: 2, inclination: 98.2, operator: 'ESA' },
+    ];
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(String(input).includes('satellites')
+        ? { satellites, total: 2, updatedAt: new Date().toISOString(), source: 'celestrak' }
+        : { status: 'ok' }),
+    })));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('ALPHA')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Add ALPHA to comparison' }));
+    expect(screen.getByRole('status')).toHaveTextContent('Choose another');
+    fireEvent.click(screen.getByRole('button', { name: 'Add BETA to comparison' }));
+
+    expect(screen.getByRole('heading', { name: 'Satellite comparison' })).toBeInTheDocument();
+    expect(screen.getByText('Altitude now')).toBeInTheDocument();
+    expect(screen.getByText('Orbital period')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /ALPHA/ }));
+    expect(screen.getByRole('heading', { name: 'ALPHA' })).toBeInTheDocument();
+  });
+
   it('renders Impact Watch, filters, and the hazardous classification', async () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
       const url = String(input);

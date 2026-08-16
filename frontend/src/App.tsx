@@ -37,6 +37,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [preset, setPreset] = useState<Preset>('All missions');
   const [sort, setSort] = useState<Sort>('Name');
   const [favorites, setFavorites] = useState<Set<string>>(() => readFavorites());
+  const [compareIds, setCompareIds] = useState<string[]>([]);
   const [cameraMode, setCameraMode] = useState<'earth' | 'focus' | 'follow'>('earth');
   const [status, setStatus] = useState<'loading' | 'live' | 'offline'>('loading');
   const [source, setSource] = useState<SatelliteResponse['source']>('unavailable');
@@ -134,6 +135,9 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   }, [catalog, favorites, operator, orbit, preset, query, sort]);
 
   const selected = catalog.find((satellite) => satellite.id === selectedId) ?? null;
+  const comparison = compareIds
+    .map((id) => catalog.find((satellite) => satellite.id === id))
+    .filter((satellite): satellite is Satellite => Boolean(satellite));
   const companyCount = new Set(
     catalog.map((satellite) => satellite.operator).filter((name) => name !== 'Other'),
   ).size;
@@ -175,6 +179,15 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       else next.add(id);
       return next;
     });
+
+  const toggleCompare = (id: string) =>
+    setCompareIds((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : current.length < 2
+          ? [...current, id]
+          : [current[1], id],
+    );
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(8,145,178,0.16),transparent_34%),radial-gradient(circle_at_85%_20%,rgba(124,58,237,0.10),transparent_30%),#020617] px-4 py-6 text-slate-100 sm:px-8 lg:px-12">
@@ -294,7 +307,17 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           </div>
 
           <aside aria-label={selected ? 'Satellite details' : 'Satellite catalog'} className="min-w-0 rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5 backdrop-blur xl:sticky xl:top-5 xl:max-h-[calc(100vh-2.5rem)] xl:self-start xl:overflow-y-auto">
-            {selected ? (
+            {comparison.length === 2 ? (
+              <SatelliteComparison
+                satellites={[comparison[0], comparison[1]]}
+                time={simulationTime}
+                onClose={() => setCompareIds([])}
+                onInspect={(id) => {
+                  setCompareIds([]);
+                  selectSatellite(id);
+                }}
+              />
+            ) : selected ? (
               <SatelliteDetails
                 satellite={selected}
                 time={simulationTime}
@@ -310,7 +333,9 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               <CatalogList
                 satellites={filtered}
                 favorites={favorites}
+                compareIds={compareIds}
                 onFavorite={toggleFavorite}
+                onCompare={toggleCompare}
                 onSelect={selectSatellite}
               />
             )}
@@ -451,12 +476,16 @@ function TimeControls({
 function CatalogList({
   satellites,
   favorites,
+  compareIds,
   onFavorite,
+  onCompare,
   onSelect,
 }: {
   satellites: Satellite[];
   favorites: Set<string>;
+  compareIds: string[];
   onFavorite: (id: string) => void;
+  onCompare: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
   const [visible, setVisible] = useState(80);
@@ -468,6 +497,11 @@ function CatalogList({
       <p className="mt-2 text-sm leading-6 text-slate-400">
         Select a marker or choose an object below to inspect its orbit.
       </p>
+      {compareIds.length === 1 && (
+        <p role="status" className="mt-3 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+          One satellite selected. Choose another ⇄ button to compare.
+        </p>
+      )}
       <div className="mt-5 max-h-[410px] space-y-2 overflow-auto pr-1">
         {satellites.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-5 py-8 text-center">
@@ -499,6 +533,14 @@ function CatalogList({
               </span>
             </button>
             <button
+              aria-label={`${compareIds.includes(satellite.id) ? 'Remove' : 'Add'} ${satellite.name} ${compareIds.includes(satellite.id) ? 'from' : 'to'} comparison`}
+              aria-pressed={compareIds.includes(satellite.id)}
+              onClick={() => onCompare(satellite.id)}
+              className={`px-3 text-base ${compareIds.includes(satellite.id) ? 'bg-cyan-400/10 text-cyan-300' : 'text-slate-600 hover:text-cyan-300'}`}
+            >
+              ⇄
+            </button>
+            <button
               aria-label={`${favorites.has(satellite.id) ? 'Remove' : 'Add'} ${satellite.name} ${favorites.has(satellite.id) ? 'from' : 'to'} favorites`}
               onClick={() => onFavorite(satellite.id)}
               className={`px-3 text-lg ${favorites.has(satellite.id) ? 'text-amber-300' : 'text-slate-600 hover:text-amber-300'}`}
@@ -516,6 +558,76 @@ function CatalogList({
           </button>
         )}
       </div>
+    </>
+  );
+}
+
+function SatelliteComparison({
+  satellites,
+  time,
+  onClose,
+  onInspect,
+}: {
+  satellites: [Satellite, Satellite];
+  time: Date;
+  onClose: () => void;
+  onInspect: (id: string) => void;
+}) {
+  const values = satellites.map((satellite) => {
+    const metrics = orbitalMetrics(satellite, time);
+    const altitude = altitudeKm(satellite, time);
+    return {
+      altitude: altitude == null ? 'Not available' : `${altitude.toLocaleString()} km`,
+      velocity: formatVelocity(satelliteVelocityKmS(satellite, time)),
+      period: formatPeriod(orbitalPeriodMinutes(satellite.meanMotion)),
+      inclination: `${satellite.inclination.toFixed(1)}°`,
+      perigee: Number.isFinite(metrics.perigeeKm) ? `${Math.round(metrics.perigeeKm).toLocaleString()} km` : 'Not available',
+      apogee: Number.isFinite(metrics.apogeeKm) ? `${Math.round(metrics.apogeeKm).toLocaleString()} km` : 'Not available',
+    };
+  });
+  const rows = [
+    ['Operator', satellites[0].operator, satellites[1].operator],
+    ['Mission', satellites[0].purpose, satellites[1].purpose],
+    ['Orbit class', satellites[0].orbit, satellites[1].orbit],
+    ['Altitude now', values[0].altitude, values[1].altitude],
+    ['Velocity now', values[0].velocity, values[1].velocity],
+    ['Orbital period', values[0].period, values[1].period],
+    ['Inclination', values[0].inclination, values[1].inclination],
+    ['Perigee', values[0].perigee, values[1].perigee],
+    ['Apogee', values[0].apogee, values[1].apogee],
+  ];
+
+  return (
+    <article aria-labelledby="comparison-title">
+      <button onClick={onClose} className="text-xs text-cyan-400 hover:text-cyan-300">
+        ← Back to catalog
+      </button>
+      <p className="mt-6 text-xs uppercase tracking-[0.25em] text-cyan-400">Side by side</p>
+      <h2 id="comparison-title" className="mt-2 text-2xl font-semibold">Satellite comparison</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-400">Compare live propagated values at the current simulation time.</p>
+      <div className="mt-5 grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden rounded-xl border border-slate-800 bg-slate-800 text-xs">
+        <div className="bg-slate-950/90 p-2" />
+        {satellites.map((satellite) => (
+          <button key={satellite.id} onClick={() => onInspect(satellite.id)} className="min-w-0 bg-cyan-950/40 p-3 text-left font-semibold text-cyan-200 hover:bg-cyan-950/70">
+            <span className="block truncate">{satellite.name}</span>
+            <span className="mt-1 block text-[10px] font-normal text-slate-500">NORAD {satellite.noradId}</span>
+          </button>
+        ))}
+        {rows.map(([label, left, right]) => (
+          <ComparisonRow key={label} label={label} left={left} right={right} />
+        ))}
+      </div>
+      <p className="mt-4 text-[10px] leading-4 text-slate-500">Select either satellite name to open its complete details and orbit controls.</p>
+    </article>
+  );
+}
+
+function ComparisonRow({ label, left, right }: { label: string; left: string; right: string }) {
+  return (
+    <>
+      <div className="bg-slate-950/90 p-2 text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="min-w-0 bg-slate-950/70 p-2 text-slate-200" title={left}>{left}</div>
+      <div className="min-w-0 bg-slate-950/70 p-2 text-slate-200" title={right}>{right}</div>
     </>
   );
 }
