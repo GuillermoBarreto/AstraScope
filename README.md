@@ -2,12 +2,11 @@
 
 Formerly OrbiWatch.
 
-> The repository name `GuillermoBarreto/orbiwatch` is legacy. The product is now AstraScope; the repository will be renamed separately after branding verification.
-
 ![AstraScope: Earth with satellite orbital paths](docs/images/orbitwatch-hero.png)
 
 AstraScope is an interactive space-monitoring platform built with React, Three.js, and FastAPI. Explore Earth's orbital neighborhood and near-space activity in real time through satellite tracking, near-Earth object close approaches, and reconstructed atmospheric fireball events.
 
+adding words for repo
 ## Features
 
 - the complete public CelesTrak active catalog with automatic SatNOGS fallback
@@ -16,11 +15,13 @@ AstraScope is an interactive space-monitoring platform built with React, Three.j
 - SGP4/SDP4 propagation from OMM and TLE orbital elements
 - GPU-instanced rendering for thousands of spacecraft
 - operator, orbit-class, name, and NORAD filtering
+- side-by-side comparison of live orbital and mission data
 - pause, real time, and accelerated simulation up to 600×
 - selected-satellite ground track and coverage footprint
 - current latitude, longitude, altitude, purpose, operator, and catalog metadata
 - saved or device-based observer location
 - upcoming 24-hour pass predictions above 10° elevation
+- Sky Tonight forecast ranking potentially visible Watchlist passes by rise time
 - responsive desktop and mobile interface
 - split Vercel frontend and Render API deployment configuration
 - Impact Watch for upcoming near-Earth object approaches, potentially hazardous classifications, and recent atmospheric fireballs

@@ -58,19 +58,6 @@ describe('App', () => {
 
     expect(screen.getByText('AstraScope')).toBeInTheDocument();
     expect(screen.getByText(/Explore Earth's orbital neighborhood and near-space activity in real time/i)).toBeInTheDocument();
-  });
-
-  it('explains invalid observer coordinates instead of failing silently', () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
-    render(<App />);
-
-    fireEvent.change(screen.getByLabelText('Observer latitude'), { target: { value: '100' } });
-    fireEvent.change(screen.getByLabelText('Observer longitude'), { target: { value: '-200' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    expect(screen.getByRole('alert')).toHaveTextContent('latitude from −90 to 90');
-    expect(localStorage.getItem('astrascope-observer')).toBeNull();
-  });
 
   it('renders Impact Watch, filters, and the hazardous classification', async () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {

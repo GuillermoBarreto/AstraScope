@@ -4,6 +4,7 @@ import type { Observer, Satellite, SatelliteResponse } from '@/types/satellite';
 import { apiUrl } from '@/utils/api';
 import { altitudeKm, compassDirection, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
 import { canonicalSatelliteUrl, formatPeriod, formatVelocity, fallbackKind } from '@/utils/satelliteDetails';
+import { skyTonightPasses } from '@/utils/skyTonight';
 import { ImpactWatch, ModeSelector } from '@/components/Impact/ImpactWatch';
 
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
@@ -36,6 +37,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [preset, setPreset] = useState<Preset>('All missions');
   const [sort, setSort] = useState<Sort>('Name');
   const [favorites, setFavorites] = useState<Set<string>>(() => readFavorites());
+  const [compareIds, setCompareIds] = useState<string[]>([]);
   const [cameraMode, setCameraMode] = useState<'earth' | 'focus' | 'follow'>('earth');
   const [status, setStatus] = useState<'loading' | 'live' | 'offline'>('loading');
   const [source, setSource] = useState<SatelliteResponse['source']>('unavailable');
@@ -133,6 +135,9 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   }, [catalog, favorites, operator, orbit, preset, query, sort]);
 
   const selected = catalog.find((satellite) => satellite.id === selectedId) ?? null;
+  const comparison = compareIds
+    .map((id) => catalog.find((satellite) => satellite.id === id))
+    .filter((satellite): satellite is Satellite => Boolean(satellite));
   const companyCount = new Set(
     catalog.map((satellite) => satellite.operator).filter((name) => name !== 'Other'),
   ).size;
@@ -174,6 +179,15 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       else next.add(id);
       return next;
     });
+
+  const toggleCompare = (id: string) =>
+    setCompareIds((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : current.length < 2
+          ? [...current, id]
+          : [current[1], id],
+    );
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(8,145,178,0.16),transparent_34%),radial-gradient(circle_at_85%_20%,rgba(124,58,237,0.10),transparent_30%),#020617] px-4 py-6 text-slate-100 sm:px-8 lg:px-12">
@@ -293,7 +307,17 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           </div>
 
           <aside aria-label={selected ? 'Satellite details' : 'Satellite catalog'} className="min-w-0 rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5 backdrop-blur xl:sticky xl:top-5 xl:max-h-[calc(100vh-2.5rem)] xl:self-start xl:overflow-y-auto">
-            {selected ? (
+            {comparison.length === 2 ? (
+              <SatelliteComparison
+                satellites={[comparison[0], comparison[1]]}
+                time={simulationTime}
+                onClose={() => setCompareIds([])}
+                onInspect={(id) => {
+                  setCompareIds([]);
+                  selectSatellite(id);
+                }}
+              />
+            ) : selected ? (
               <SatelliteDetails
                 satellite={selected}
                 time={simulationTime}
@@ -309,11 +333,25 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               <CatalogList
                 satellites={filtered}
                 favorites={favorites}
+                compareIds={compareIds}
                 onFavorite={toggleFavorite}
+                onCompare={toggleCompare}
                 onSelect={selectSatellite}
               />
             )}
-            <Watchlist satellites={catalog.filter((satellite) => favorites.has(satellite.id))} onSelect={selectSatellite} onRemove={toggleFavorite} />
+            <Watchlist
+              satellites={catalog.filter((satellite) => favorites.has(satellite.id))}
+              availableIds={new Set(catalog.map((satellite) => satellite.id))}
+              onSelect={selectSatellite}
+              onRemove={toggleFavorite}
+              onImport={(ids) => setFavorites((current) => new Set([...current, ...ids]))}
+            />
+            <SkyTonight
+              satellites={catalog.filter((satellite) => favorites.has(satellite.id))}
+              observer={observer}
+              time={simulationTime}
+              onSelect={selectSatellite}
+            />
             <ObserverPanel observer={observer} onChange={saveObserver} />
           </aside>
         </section>
@@ -438,12 +476,16 @@ function TimeControls({
 function CatalogList({
   satellites,
   favorites,
+  compareIds,
   onFavorite,
+  onCompare,
   onSelect,
 }: {
   satellites: Satellite[];
   favorites: Set<string>;
+  compareIds: string[];
   onFavorite: (id: string) => void;
+  onCompare: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
   const [visible, setVisible] = useState(80);
@@ -455,6 +497,11 @@ function CatalogList({
       <p className="mt-2 text-sm leading-6 text-slate-400">
         Select a marker or choose an object below to inspect its orbit.
       </p>
+      {compareIds.length === 1 && (
+        <p role="status" className="mt-3 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
+          One satellite selected. Choose another ⇄ button to compare.
+        </p>
+      )}
       <div className="mt-5 max-h-[410px] space-y-2 overflow-auto pr-1">
         {satellites.length === 0 && (
           <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-5 py-8 text-center">
@@ -486,6 +533,14 @@ function CatalogList({
               </span>
             </button>
             <button
+              aria-label={`${compareIds.includes(satellite.id) ? 'Remove' : 'Add'} ${satellite.name} ${compareIds.includes(satellite.id) ? 'from' : 'to'} comparison`}
+              aria-pressed={compareIds.includes(satellite.id)}
+              onClick={() => onCompare(satellite.id)}
+              className={`px-3 text-base ${compareIds.includes(satellite.id) ? 'bg-cyan-400/10 text-cyan-300' : 'text-slate-600 hover:text-cyan-300'}`}
+            >
+              ⇄
+            </button>
+            <button
               aria-label={`${favorites.has(satellite.id) ? 'Remove' : 'Add'} ${satellite.name} ${favorites.has(satellite.id) ? 'from' : 'to'} favorites`}
               onClick={() => onFavorite(satellite.id)}
               className={`px-3 text-lg ${favorites.has(satellite.id) ? 'text-amber-300' : 'text-slate-600 hover:text-amber-300'}`}
@@ -503,6 +558,76 @@ function CatalogList({
           </button>
         )}
       </div>
+    </>
+  );
+}
+
+function SatelliteComparison({
+  satellites,
+  time,
+  onClose,
+  onInspect,
+}: {
+  satellites: [Satellite, Satellite];
+  time: Date;
+  onClose: () => void;
+  onInspect: (id: string) => void;
+}) {
+  const values = satellites.map((satellite) => {
+    const metrics = orbitalMetrics(satellite, time);
+    const altitude = altitudeKm(satellite, time);
+    return {
+      altitude: altitude == null ? 'Not available' : `${altitude.toLocaleString()} km`,
+      velocity: formatVelocity(satelliteVelocityKmS(satellite, time)),
+      period: formatPeriod(orbitalPeriodMinutes(satellite.meanMotion)),
+      inclination: `${satellite.inclination.toFixed(1)}°`,
+      perigee: Number.isFinite(metrics.perigeeKm) ? `${Math.round(metrics.perigeeKm).toLocaleString()} km` : 'Not available',
+      apogee: Number.isFinite(metrics.apogeeKm) ? `${Math.round(metrics.apogeeKm).toLocaleString()} km` : 'Not available',
+    };
+  });
+  const rows = [
+    ['Operator', satellites[0].operator, satellites[1].operator],
+    ['Mission', satellites[0].purpose, satellites[1].purpose],
+    ['Orbit class', satellites[0].orbit, satellites[1].orbit],
+    ['Altitude now', values[0].altitude, values[1].altitude],
+    ['Velocity now', values[0].velocity, values[1].velocity],
+    ['Orbital period', values[0].period, values[1].period],
+    ['Inclination', values[0].inclination, values[1].inclination],
+    ['Perigee', values[0].perigee, values[1].perigee],
+    ['Apogee', values[0].apogee, values[1].apogee],
+  ];
+
+  return (
+    <article aria-labelledby="comparison-title">
+      <button onClick={onClose} className="text-xs text-cyan-400 hover:text-cyan-300">
+        ← Back to catalog
+      </button>
+      <p className="mt-6 text-xs uppercase tracking-[0.25em] text-cyan-400">Side by side</p>
+      <h2 id="comparison-title" className="mt-2 text-2xl font-semibold">Satellite comparison</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-400">Compare live propagated values at the current simulation time.</p>
+      <div className="mt-5 grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1fr)] gap-px overflow-hidden rounded-xl border border-slate-800 bg-slate-800 text-xs">
+        <div className="bg-slate-950/90 p-2" />
+        {satellites.map((satellite) => (
+          <button key={satellite.id} onClick={() => onInspect(satellite.id)} className="min-w-0 bg-cyan-950/40 p-3 text-left font-semibold text-cyan-200 hover:bg-cyan-950/70">
+            <span className="block truncate">{satellite.name}</span>
+            <span className="mt-1 block text-[10px] font-normal text-slate-500">NORAD {satellite.noradId}</span>
+          </button>
+        ))}
+        {rows.map(([label, left, right]) => (
+          <ComparisonRow key={label} label={label} left={left} right={right} />
+        ))}
+      </div>
+      <p className="mt-4 text-[10px] leading-4 text-slate-500">Select either satellite name to open its complete details and orbit controls.</p>
+    </article>
+  );
+}
+
+function ComparisonRow({ label, left, right }: { label: string; left: string; right: string }) {
+  return (
+    <>
+      <div className="bg-slate-950/90 p-2 text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="min-w-0 bg-slate-950/70 p-2 text-slate-200" title={left}>{left}</div>
+      <div className="min-w-0 bg-slate-950/70 p-2 text-slate-200" title={right}>{right}</div>
     </>
   );
 }
@@ -662,13 +787,41 @@ function SatelliteDetails({
 
 function Watchlist({
   satellites,
+  availableIds,
   onSelect,
   onRemove,
+  onImport,
 }: {
   satellites: Satellite[];
+  availableIds: Set<string>;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
+  onImport: (ids: string[]) => void;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [backupStatus, setBackupStatus] = useState('');
+  const exportWatchlist = () => {
+    const contents = createWatchlistBackup(satellites.map((satellite) => satellite.id));
+    const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `astrascope-watchlist-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setBackupStatus(`Exported ${satellites.length} satellite${satellites.length === 1 ? '' : 's'}.`);
+  };
+  const importWatchlist = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const ids = parseWatchlistBackup(await file.text(), availableIds);
+      onImport(ids);
+      setBackupStatus(`Imported ${ids.length} available satellite${ids.length === 1 ? '' : 's'}.`);
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : 'Could not import this backup.');
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
   return (
     <section aria-labelledby="watchlist-title" className="mt-6 border-t border-slate-800 pt-5">
       <div className="flex items-center justify-between">
@@ -690,6 +843,137 @@ function Watchlist({
       ) : (
         <p className="mt-2 text-xs leading-5 text-slate-500">Save satellites to return to them quickly. Your Watchlist stays on this device.</p>
       )}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button
+          onClick={exportWatchlist}
+          disabled={satellites.length === 0}
+          className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-300 hover:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Export backup
+        </button>
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-300 hover:border-cyan-500"
+        >
+          Import backup
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          aria-label="Choose Watchlist backup"
+          onChange={(event) => void importWatchlist(event.target.files?.[0])}
+          className="sr-only"
+        />
+      </div>
+      {backupStatus && <p role="status" className="mt-2 text-[10px] leading-4 text-cyan-300">{backupStatus}</p>}
+    </section>
+  );
+}
+
+function SkyTonight({
+  satellites,
+  observer,
+  time,
+  onSelect,
+}: {
+  satellites: Satellite[];
+  observer: Observer | null;
+  time: Date;
+  onSelect: (id: string) => void;
+}) {
+  const passStart = Math.floor(time.getTime() / 60_000) * 60_000;
+  const passes = useMemo(
+    () => (observer ? skyTonightPasses(satellites, observer, new Date(passStart)) : []),
+    [observer, passStart, satellites],
+  );
+  const addToCalendar = (pass: (typeof passes)[number]) => {
+    if (!observer) return;
+    const calendar = satellitePassCalendar(
+      pass.satellite,
+      pass,
+      observer,
+      canonicalSatelliteUrl(pass.satellite),
+    );
+    const url = URL.createObjectURL(new Blob([calendar], { type: 'text/calendar;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = calendarFilename(pass.satellite, pass);
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  return (
+    <section aria-labelledby="sky-tonight-title" className="mt-6 border-t border-slate-800 pt-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300">Visible passes</p>
+          <h3 id="sky-tonight-title" className="mt-1 text-sm font-semibold">Sky Tonight</h3>
+        </div>
+        {observer && satellites.length > 0 && (
+          <span className="rounded-full bg-violet-400/10 px-2 py-1 text-[10px] text-violet-200">
+            Next 24 hours
+          </span>
+        )}
+      </div>
+      {!observer ? (
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          Set your observer location below to find visible Watchlist passes.
+        </p>
+      ) : satellites.length === 0 ? (
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          Add satellites to your Watchlist to build a personal viewing forecast.
+        </p>
+      ) : passes.length === 0 ? (
+        <p className="mt-2 rounded-xl border border-dashed border-slate-700 p-3 text-xs leading-5 text-slate-500">
+          No potentially visible Watchlist passes are predicted in the next 24 hours.
+        </p>
+      ) : (
+        <ol className="mt-3 space-y-2">
+          {passes.map((pass) => (
+            <li key={`${pass.satellite.id}-${pass.rise.toISOString()}`}>
+              <article className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 transition hover:border-violet-500/60 hover:bg-violet-950/20">
+                <span className="flex items-start justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold text-slate-200">
+                      {pass.satellite.name}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-slate-500">
+                      {pass.rise.toLocaleDateString([], { weekday: 'short' })}{' '}
+                      {pass.rise.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {' · '}{Math.max(1, Math.round((pass.set.getTime() - pass.rise.getTime()) / 60_000))} min
+                    </span>
+                  </span>
+                  <span className="shrink-0 rounded-full bg-emerald-400/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
+                    {Math.round(pass.maxElevation)}° peak
+                  </span>
+                </span>
+                <span className="mt-2 block text-[10px] text-slate-500">
+                  {compassDirection(pass.riseAzimuth)} → {compassDirection(pass.setAzimuth)} · potentially visible
+                </span>
+                <span className="mt-3 flex gap-2 border-t border-slate-800 pt-2">
+                  <button
+                    onClick={() => onSelect(pass.satellite.id)}
+                    className="flex-1 rounded-lg px-2 py-1.5 text-[10px] font-medium text-violet-200 hover:bg-violet-400/10 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                  >
+                    Inspect satellite
+                  </button>
+                  <button
+                    onClick={() => addToCalendar(pass)}
+                    aria-label={`Add ${pass.satellite.name} pass to calendar`}
+                    className="flex-1 rounded-lg bg-cyan-400/10 px-2 py-1.5 text-[10px] font-medium text-cyan-200 hover:bg-cyan-400/20 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                  >
+                    Add to calendar
+                  </button>
+                </span>
+              </article>
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="mt-3 text-[10px] leading-4 text-slate-600">
+        Visibility is an estimate based on satellite illumination and local twilight.
+      </p>
     </section>
   );
 }
