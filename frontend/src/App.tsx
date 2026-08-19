@@ -703,20 +703,58 @@ function ObserverPanel({
 }) {
   const [latitude, setLatitude] = useState(observer?.latitude.toString() ?? '');
   const [longitude, setLongitude] = useState(observer?.longitude.toString() ?? '');
-  const useBrowserLocation = () =>
-    navigator.geolocation.getCurrentPosition((position) =>
-      onChange({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        altitudeKm: Math.max(0, (position.coords.altitude ?? 0) / 1000),
-        label: 'My location',
-      }),
+  const [message, setMessage] = useState('');
+  const [locating, setLocating] = useState(false);
+
+  useEffect(() => {
+    setLatitude(observer?.latitude.toString() ?? '');
+    setLongitude(observer?.longitude.toString() ?? '');
+  }, [observer]);
+
+  const useBrowserLocation = () => {
+    if (!navigator.geolocation) {
+      setMessage('Device location is not available in this browser.');
+      return;
+    }
+    setMessage('');
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        onChange({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          altitudeKm: Math.max(0, (position.coords.altitude ?? 0) / 1000),
+          label: 'My location',
+        });
+        setLocating(false);
+      },
+      (error) => {
+        setLocating(false);
+        setMessage(
+          error.code === error.PERMISSION_DENIED
+            ? 'Location permission was denied. Enter coordinates manually or allow access and try again.'
+            : 'Your location could not be determined. Enter coordinates manually or try again.',
+        );
+      },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
     );
+  };
   const save = () => {
     const lat = Number(latitude);
     const lon = Number(longitude);
-    if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180)
+    if (
+      latitude.trim() &&
+      longitude.trim() &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lon) &&
+      Math.abs(lat) <= 90 &&
+      Math.abs(lon) <= 180
+    ) {
+      setMessage('');
       onChange({ latitude: lat, longitude: lon, altitudeKm: 0, label: 'Saved location' });
+    } else {
+      setMessage('Enter a latitude from −90 to 90 and a longitude from −180 to 180.');
+    }
   };
   return (
     <section className="mt-6 border-t border-slate-800 pt-5">
@@ -761,11 +799,17 @@ function ObserverPanel({
         </button>
         <button
           onClick={useBrowserLocation}
-          className="flex-1 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300"
+          disabled={locating}
+          className="flex-1 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 disabled:cursor-wait disabled:opacity-60"
         >
-          Use device
+          {locating ? 'Locating…' : 'Use device'}
         </button>
       </div>
+      {message && (
+        <p role="alert" className="mt-3 text-xs leading-5 text-rose-300">
+          {message}
+        </p>
+      )}
       {observer && (
         <p className="mt-3 text-xs text-emerald-400">
           ● {observer.latitude.toFixed(3)}°, {observer.longitude.toFixed(3)}°
