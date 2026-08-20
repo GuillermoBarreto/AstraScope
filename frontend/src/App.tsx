@@ -5,7 +5,11 @@ import { apiUrl } from '@/utils/api';
 import { altitudeKm, compassDirection, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
 import { canonicalSatelliteUrl, formatPeriod, formatVelocity, fallbackKind } from '@/utils/satelliteDetails';
 import { skyTonightPasses } from '@/utils/skyTonight';
-import { ImpactWatch, ModeSelector } from '@/components/Impact/ImpactWatch';
+import { calendarFilename, satellitePassCalendar } from '@/utils/calendar';
+import { createWatchlistBackup, parseWatchlistBackup } from '@/utils/watchlistBackup';
+import { ImpactWatch } from '@/components/Impact/ImpactWatch';
+import { AppHeader } from '@/components/AppHeader';
+import { formatUtcClock, freshnessLabel } from '@/utils/time';
 
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
 const SPEEDS = [0, 1, 10, 60, 600];
@@ -42,7 +46,6 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [status, setStatus] = useState<'loading' | 'live' | 'offline'>('loading');
   const [source, setSource] = useState<SatelliteResponse['source']>('unavailable');
   const [upstream, setUpstream] = useState<SatelliteResponse['upstream']>(null);
-  const [catalogScope, setCatalogScope] = useState<SatelliteResponse['scope']>('active');
   const [updatedAt, setUpdatedAt] = useState('');
   const [simulationTime, setSimulationTime] = useState(() => new Date());
   const [speed, setSpeed] = useState(1);
@@ -66,7 +69,6 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         setUpdatedAt(payload.updatedAt);
         setSource(payload.source);
         setUpstream(payload.upstream ?? null);
-        setCatalogScope(payload.scope ?? 'active');
         setStatus(payload.source === 'unavailable' ? 'offline' : 'live');
       })
       .catch((error: unknown) => {
@@ -190,54 +192,30 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
     );
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_15%_0%,rgba(8,145,178,0.16),transparent_34%),radial-gradient(circle_at_85%_20%,rgba(124,58,237,0.10),transparent_30%),#020617] px-4 py-6 text-slate-100 sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-[1500px]">
-        <header className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
-          <div>
-            <div className="mb-3 flex items-center gap-3">
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-cyan-400 font-black text-slate-950">
-                A
-              </span>
-              <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-300">
-                AstraScope
-              </p>
-            </div>
-            <h1 className="max-w-3xl text-4xl font-semibold tracking-tight sm:text-6xl">
-              Explore Earth's orbital neighborhood and near-space activity in real time.
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-400">
-              Explore real spacecraft with SGP4 propagation, orbit tracks, coverage footprints, time
-              travel, and passes over your location.
-            </p>
-          </div>
-          <div className="space-y-3"><ModeSelector impact={false} onMode={onMode} /><StatusBadge status={status} source={source} upstream={upstream} /></div>
-        </header>
-
-        <section aria-label="Catalog summary" className="mb-5 grid gap-3 sm:grid-cols-3">
-          <Metric
-            label={catalogScope === 'tracked' ? 'Tracked catalog' : 'Active catalog'}
-            value={catalog.length ? catalog.length.toLocaleString() : '—'}
-          />
-          <Metric label="Filtered objects" value={filtered.length.toLocaleString()} />
-          <Metric label="Named operators" value={companyCount.toString()} />
-        </section>
-
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="min-w-0 space-y-4">
-            <div className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-3 backdrop-blur md:grid-cols-[1fr_auto_auto_auto]">
+    <main className="orbital-app">
+      <AppHeader active="satellite" onNavigate={onMode} status={status} statusLabel={catalogStatusLabel(status, source, upstream)} utc={simulationTime} watchlistCount={favorites.size} onWatchlist={() => setPreset('Watchlist')} />
+      <div className="orbital-workspace">
+        <section className="catalog-toolbar" aria-label="Satellite discovery controls">
+          <div className="catalog-controls">
               <label className="relative">
                 <span className="sr-only">Search satellite name or NORAD ID</span>
                 <input
                   ref={searchRef}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search name or NORAD ID…"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 py-3 pl-4 pr-12 text-sm outline-none transition placeholder:text-slate-600 focus:border-cyan-500"
+                  placeholder="Search satellite / NORAD"
+                  className="catalog-search"
                 />
                 <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-500">
                   /
                 </kbd>
               </label>
+              <Filter
+                label="Mission"
+                value={preset}
+                values={PRESETS}
+                onChange={(value) => setPreset(value as Preset)}
+              />
               <Filter
                 label="Operator"
                 value={operator}
@@ -251,29 +229,34 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 values={SORTS}
                 onChange={(value) => setSort(value as Sort)}
               />
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-2">
-                {PRESETS.map((item) => (
+          </div>
+          <div className="catalog-subbar">
+              <div className="mission-chips">
+                {PRESETS.filter((item) => !['All missions', 'Watchlist'].includes(item)).map((item) => (
                   <button
                     key={item}
                     onClick={() => setPreset(item)}
-                    className={`rounded-full border px-3 py-1.5 text-xs transition ${preset === item ? 'border-cyan-400 bg-cyan-400 text-slate-950' : 'border-slate-700 bg-slate-900 text-slate-400 hover:border-cyan-700 hover:text-cyan-300'}`}
+                    className={preset === item ? 'active' : ''}
                   >
                     {item}
-                    {item === 'Watchlist' ? ` (${favorites.size})` : ''}
                   </button>
                 ))}
               </div>
               {hasActiveFilters && (
                 <button
                   onClick={resetFilters}
-                  className="rounded-full border border-rose-400/30 px-3 py-1.5 text-xs text-rose-300 transition hover:bg-rose-400/10"
+                  className="reset-filters"
                 >
                   Reset filters
                 </button>
               )}
-            </div>
+              <div className="catalog-telemetry" aria-live="polite">
+                {status === 'loading' ? <><span className="telemetry-skeleton" /> CATALOG SYNCING…</> : <><strong>{catalog.length.toLocaleString()}</strong> OBJECTS <b>•</b> <strong>{filtered.length.toLocaleString()}</strong> DISPLAYED <b>•</b> {companyCount} OPERATORS {updatedAt && <><b>•</b> UPDATED {freshnessLabel(updatedAt)}</>}</>}
+              </div>
+          </div>
+        </section>
+        <section className={`workspace-grid ${selected ? 'has-selection' : ''}`}>
+          <div className="visualization-pane">
             <div id="satellite-scene">
             <Scene
               satellites={filtered}
@@ -293,20 +276,19 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               onSpeed={setSpeed}
               onTime={setSimulationTime}
             />
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+            <div className="visualization-footer">
               <span aria-live="polite">
-                Rendering {filtered.length.toLocaleString()} of {catalog.length.toLocaleString()}{' '}
-                objects with SGP4/SDP4 propagation.
+                {status === 'loading' ? 'Preparing orbital catalog…' : `Rendering ${filtered.length.toLocaleString()} of ${catalog.length.toLocaleString()} objects`} · SGP4/SDP4
               </span>
               <span>
                 {updatedAt
-                  ? `Catalog synced ${new Date(updatedAt).toLocaleString()}`
-                  : 'Waiting for catalog sync'}
+                  ? `CATALOG SYNCED ${formatUtcClock(new Date(updatedAt))}`
+                  : status === 'loading' ? 'CATALOG · SYNCING…' : 'CATALOG · OFFLINE'}
               </span>
             </div>
           </div>
 
-          <aside aria-label={selected ? 'Satellite details' : 'Satellite catalog'} className="min-w-0 rounded-[2rem] border border-slate-800 bg-slate-900/60 p-5 backdrop-blur xl:sticky xl:top-5 xl:max-h-[calc(100vh-2.5rem)] xl:self-start xl:overflow-y-auto">
+          <aside aria-label={selected ? 'Satellite details' : 'Satellite catalog'} className={`object-inspector ${selected ? 'object-inspector--open' : ''}`}>
             {comparison.length === 2 ? (
               <SatelliteComparison
                 satellites={[comparison[0], comparison[1]]}
@@ -360,15 +342,11 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   );
 }
 
-function StatusBadge({
-  status,
-  source,
-  upstream,
-}: {
-  status: 'loading' | 'live' | 'offline';
-  source: SatelliteResponse['source'];
-  upstream: SatelliteResponse['upstream'];
-}) {
+function catalogStatusLabel(
+  status: 'loading' | 'live' | 'offline',
+  source: SatelliteResponse['source'],
+  upstream: SatelliteResponse['upstream'],
+): string {
   const label =
     status === 'loading'
       ? 'Loading orbital catalog'
@@ -381,23 +359,7 @@ function StatusBadge({
             : source.includes('cache')
               ? `${upstream === 'spacetrack' ? 'Space-Track' : upstream === 'satnogs' ? 'SatNOGS' : 'CelesTrak'} cache online`
               : 'CelesTrak catalog online';
-  return (
-    <div className="flex items-center gap-2 self-start rounded-full border border-slate-800 bg-slate-900/70 px-4 py-2 text-xs text-slate-300">
-      <span
-        className={`h-2 w-2 rounded-full ${status === 'live' ? 'animate-pulse bg-emerald-400' : status === 'loading' ? 'bg-amber-400' : 'bg-rose-400'}`}
-      />
-      {label}
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 px-5 py-4">
-      <p className="text-xs uppercase tracking-widest text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-white">{value}</p>
-    </div>
-  );
+  return label.replace(' orbital catalog', '').replace(' catalog online', ' LIVE').replace(' online', ' LIVE').toUpperCase();
 }
 
 function Filter({
@@ -412,7 +374,7 @@ function Filter({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3">
+    <label className="toolbar-filter">
       <span className="text-xs text-slate-500">{label}</span>
       <select
         value={value}
@@ -443,11 +405,11 @@ function TimeControls({
   return (
     <section
       aria-label="Simulation time controls"
-      className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:flex-row sm:items-center sm:justify-between"
+      className="time-controls"
     >
       <div>
         <p className="text-[10px] uppercase tracking-widest text-slate-500">Simulation time</p>
-        <time className="mt-1 block font-mono text-sm text-cyan-200">{time.toLocaleString()}</time>
+        <time className="mt-1 block font-mono text-sm text-cyan-200">{formatUtcClock(time)}</time>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {SPEEDS.map((value) => (
@@ -683,6 +645,11 @@ function SatelliteDetails({
       <p className="mt-2 text-sm text-slate-400">
         {satellite.operator} · {satellite.purpose}
       </p>
+      <section className="inspector-live" aria-label="Live satellite state">
+        <div><span>ALTITUDE</span><strong>{altitude == null ? '—' : `${altitude.toLocaleString()} km`}</strong></div>
+        <div><span>VELOCITY</span><strong>{formatVelocity(velocity)}</strong></div>
+        <div><span>ORBIT</span><strong>{satellite.orbit} · {formatPeriod(period)}</strong></div>
+      </section>
       <div className="mt-5 overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-cyan-950/60 via-slate-950 to-violet-950/50">
         {satellite.imageUrl && !imageFailed ? (
           <img src={satellite.imageUrl} alt={satellite.imageAlt ?? satellite.name} onError={() => setImageFailed(true)} className="h-40 w-full object-cover sm:h-48" />
@@ -744,7 +711,7 @@ function SatelliteDetails({
         {satellite.launchDate && <Detail label="Launch date" value={new Date(`${satellite.launchDate}T00:00:00Z`).toLocaleDateString()} />}
         {satellite.launchVehicle && <Detail label="Launch vehicle" value={satellite.launchVehicle} />}
         {satellite.launchSite && <Detail label="Launch site" value={satellite.launchSite} />}
-        <Detail label="Orbital data epoch" value={epoch && !Number.isNaN(epoch.getTime()) ? epoch.toLocaleString() : 'Not available'} />
+        <Detail label="TLE epoch" value={epoch && !Number.isNaN(epoch.getTime()) ? formatUtcClock(epoch) : 'Not available'} />
       </dl>
       {epochAgeDays != null && epochAgeDays > 7 && <p role="status" className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">Orbital elements are {Math.floor(epochAgeDays)} days old; current propagation may be stale.</p>}
       {observer ? (

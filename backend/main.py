@@ -19,13 +19,13 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 try:
     from app.api.impact import router as impact_router
-except ModuleNotFoundError:  # pragma: no cover - supports repository-root imports
+except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports repository-root imports
     from backend.app.api.impact import router as impact_router
 
 try:
     from app.core.config import settings
     from app.data.satellite_metadata import enrich_satellite
-except ModuleNotFoundError:  # pragma: no cover - supports direct module execution
+except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
     from backend.app.data.satellite_metadata import enrich_satellite
 
