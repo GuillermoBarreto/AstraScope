@@ -56,8 +56,10 @@ describe('App', () => {
 
     render(<App />);
 
-    expect(screen.getByText('AstraScope')).toBeInTheDocument();
-    expect(screen.getByText(/Explore Earth's orbital neighborhood and near-space activity in real time/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('AstraScope')).toBeInTheDocument();
+    expect(screen.getByLabelText('Satellite discovery controls')).toBeInTheDocument();
+    expect(screen.getByText('CATALOG SYNCING…')).toBeInTheDocument();
+  });
 
   it('renders Impact Watch, filters, and the hazardous classification', async () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
@@ -68,7 +70,7 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(payload) });
     }));
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: 'Impact Watch' }));
+    fireEvent.click(screen.getByRole('button', { name: 'IMPACT WATCH' }));
     expect(screen.getByRole('heading', { name: 'Impact Watch' })).toBeInTheDocument();
     expect(screen.getByLabelText('Minimum estimated diameter')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('Test NEO')).toBeInTheDocument());
@@ -78,7 +80,7 @@ describe('App', () => {
   it('shows an Impact Watch fallback when providers fail', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
     render(<App />);
-    fireEvent.click(screen.getByRole('button', { name: 'Impact Watch' }));
+    fireEvent.click(screen.getByRole('button', { name: 'IMPACT WATCH' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('temporarily unavailable'));
   });
 
@@ -89,9 +91,9 @@ describe('App', () => {
     render(<App />);
 
     expect(screen.getByRole('heading', { name: 'Impact Watch' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Satellite Watch' }));
+    fireEvent.click(screen.getByRole('button', { name: 'SATELLITES' }));
     expect(window.location.search).toBe('');
-    expect(screen.getByText(/Explore Earth's orbital neighborhood/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Satellite discovery controls')).toBeInTheDocument();
 
     window.history.replaceState({}, '', '/?view=impact');
     fireEvent.popState(window);

@@ -28,10 +28,12 @@ export function Satellites({ satellites, selectedId, onSelect, time }: Satellite
       dummy.position.set(x, y, z);
       const selected = index === selectedIndex;
       const hovered = index === hoveredIndex;
-      dummy.scale.setScalar(selected ? 2.8 : hovered ? 1.8 : 1);
+      dummy.scale.setScalar(selected ? 2.15 : hovered ? 1.6 : 1);
       dummy.updateMatrix();
       mesh.setMatrixAt(index, dummy.matrix);
-      mesh.setColorAt(index, new THREE.Color(selected ? '#fbbf24' : hovered ? '#67e8f9' : operatorColor(satellite.operator)));
+      const color = new THREE.Color(selected ? '#22d3ee' : hovered ? '#67e8f9' : operatorColor(satellite.operator));
+      if (selectedIndex >= 0 && !selected && !hovered) color.multiplyScalar(0.42);
+      mesh.setColorAt(index, color);
 
       // Keep the marker visually compact while giving it a forgiving pointer target.
       dummy.scale.setScalar(1);
