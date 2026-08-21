@@ -10,6 +10,7 @@ import { createWatchlistBackup, parseWatchlistBackup } from '@/utils/watchlistBa
 import { ImpactWatch } from '@/components/Impact/ImpactWatch';
 import { AppHeader } from '@/components/AppHeader';
 import { formatUtcClock, freshnessLabel } from '@/utils/time';
+import { removeStoredValue, storeJson } from '@/utils/storage';
 
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
 const SPEEDS = [0, 1, 10, 60, 600];
@@ -90,7 +91,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   }, [speed]);
 
   useEffect(() => {
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favorites]));
+    storeJson(FAVORITES_KEY, [...favorites]);
   }, [favorites]);
 
   useEffect(() => {
@@ -161,8 +162,8 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
 
   const saveObserver = (next: Observer | null) => {
     setObserver(next);
-    if (next) localStorage.setItem(OBSERVER_KEY, JSON.stringify(next));
-    else localStorage.removeItem(OBSERVER_KEY);
+    if (next) storeJson(OBSERVER_KEY, next);
+    else removeStoredValue(OBSERVER_KEY);
   };
 
   const selectSatellite = (id: string | null) => {
