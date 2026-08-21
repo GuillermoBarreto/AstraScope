@@ -11,6 +11,7 @@ import { ImpactWatch } from '@/components/Impact/ImpactWatch';
 import { AppHeader } from '@/components/AppHeader';
 import { formatUtcClock, freshnessLabel } from '@/utils/time';
 import { removeStoredValue, storeJson } from '@/utils/storage';
+import { copyText } from '@/utils/clipboard';
 
 const ORBITS = ['All', 'LEO', 'MEO', 'GEO', 'HEO'];
 const SPEEDS = [0, 1, 10, 60, 600];
@@ -616,9 +617,12 @@ function SatelliteDetails({
   onFollow: () => void;
   onClose: () => void;
 }) {
-  const [shared, setShared] = useState(false);
+  const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [imageFailed, setImageFailed] = useState(false);
-  useEffect(() => setImageFailed(false), [satellite.id]);
+  useEffect(() => {
+    setImageFailed(false);
+    setShareStatus('idle');
+  }, [satellite.id]);
   const location = satelliteGeodetic(satellite, time);
   const metrics = orbitalMetrics(satellite, time);
   const altitude = altitudeKm(satellite, time);
@@ -632,9 +636,9 @@ function SatelliteDetails({
     [observer, satellite, passStart],
   );
   const share = async () => {
-    await navigator.clipboard?.writeText(canonicalSatelliteUrl(satellite));
-    setShared(true);
-    window.setTimeout(() => setShared(false), 1800);
+    const copied = await copyText(canonicalSatelliteUrl(satellite));
+    setShareStatus(copied ? 'copied' : 'failed');
+    window.setTimeout(() => setShareStatus('idle'), 1800);
   };
   return (
     <article aria-labelledby="satellite-details-title">
@@ -687,9 +691,9 @@ function SatelliteDetails({
         <button
           onClick={share}
           aria-live="polite"
-          className={`rounded-lg border px-2 py-2 text-xs ${shared ? 'border-emerald-400/50 text-emerald-300' : 'border-slate-700 text-slate-300'}`}
+          className={`rounded-lg border px-2 py-2 text-xs ${shareStatus === 'copied' ? 'border-emerald-400/50 text-emerald-300' : shareStatus === 'failed' ? 'border-rose-400/50 text-rose-300' : 'border-slate-700 text-slate-300'}`}
         >
-          {shared ? 'Copied!' : 'Copy share link'}
+          {shareStatus === 'copied' ? 'Copied!' : shareStatus === 'failed' ? 'Copy failed — retry' : 'Copy share link'}
         </button>
         <a href={satellite.sourceUrl ?? `https://celestrak.org/NORAD/elements/gp.php?CATNR=${satellite.noradId}&FORMAT=json`} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-700 px-2 py-2 text-center text-xs text-slate-300 hover:border-cyan-500">
           Open source data ↗
