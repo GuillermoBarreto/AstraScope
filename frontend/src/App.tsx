@@ -46,6 +46,8 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [cameraMode, setCameraMode] = useState<'earth' | 'focus' | 'follow'>('earth');
   const [status, setStatus] = useState<'loading' | 'live' | 'offline'>('loading');
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogRequest, setCatalogRequest] = useState(0);
   const [source, setSource] = useState<SatelliteResponse['source']>('unavailable');
   const [upstream, setUpstream] = useState<SatelliteResponse['upstream']>(null);
   const [updatedAt, setUpdatedAt] = useState('');
@@ -57,12 +59,14 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      fetch(apiUrl('/health'), { signal: controller.signal }),
-      fetch(apiUrl('/satellites'), { signal: controller.signal }),
-    ])
-      .then(([healthResponse, satellitesResponse]) => {
-        if (!healthResponse.ok) throw new Error('Health request failed');
+    setStatus('loading');
+    setCatalogError(false);
+
+    // Health telemetry is useful to the server, but it should never prevent a
+    // valid catalog response from reaching the workspace.
+    void fetch(apiUrl('/health'), { signal: controller.signal }).catch(() => undefined);
+    fetch(apiUrl('/satellites'), { signal: controller.signal })
+      .then((satellitesResponse) => {
         if (!satellitesResponse.ok) throw new Error('Catalog request failed');
         return satellitesResponse.json() as Promise<SatelliteResponse>;
       })
@@ -76,9 +80,10 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         setStatus('offline');
+        setCatalogError(true);
       });
     return () => controller.abort();
-  }, []);
+  }, [catalogRequest]);
 
   useEffect(() => {
     lastTick.current = Date.now();
@@ -257,6 +262,14 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               </div>
           </div>
         </section>
+        {catalogError && (
+          <div className="catalog-alert" role="alert">
+            <span>
+              <strong>Catalog unavailable.</strong> Check your connection or try syncing again.
+            </span>
+            <button onClick={() => setCatalogRequest((request) => request + 1)}>Retry sync</button>
+          </div>
+        )}
         <section className={`workspace-grid ${selected ? 'has-selection' : ''}`}>
           <div className="visualization-pane">
             <div id="satellite-scene">
