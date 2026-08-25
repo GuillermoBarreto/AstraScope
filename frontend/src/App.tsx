@@ -101,7 +101,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   }, [favorites]);
 
   useEffect(() => {
-    const focusSearch = (event: KeyboardEvent) => {
+    const handleKeyboardShortcut = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       const typing =
         target.tagName === 'INPUT' ||
@@ -114,11 +114,18 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       } else if (event.key === 'Escape' && document.activeElement === searchRef.current) {
         setQuery('');
         searchRef.current?.blur();
+      } else if (event.key === 'Escape' && (selectedId || compareIds.length > 0)) {
+        setCompareIds([]);
+        setSelectedId(null);
+        setCameraMode('earth');
+        const url = new URL(window.location.href);
+        url.searchParams.delete('satellite');
+        window.history.replaceState({}, '', url);
       }
     };
-    window.addEventListener('keydown', focusSearch);
-    return () => window.removeEventListener('keydown', focusSearch);
-  }, []);
+    window.addEventListener('keydown', handleKeyboardShortcut);
+    return () => window.removeEventListener('keydown', handleKeyboardShortcut);
+  }, [compareIds.length, selectedId]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -213,9 +220,23 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                   placeholder="Search satellite / NORAD"
                   className="catalog-search"
                 />
-                <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-500">
-                  /
-                </kbd>
+                {query ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery('');
+                      searchRef.current?.focus();
+                    }}
+                    aria-label="Clear satellite search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  >
+                    Clear
+                  </button>
+                ) : (
+                  <kbd aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-500">
+                    /
+                  </kbd>
+                )}
               </label>
               <Filter
                 label="Mission"
@@ -243,6 +264,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                   <button
                     key={item}
                     onClick={() => setPreset(item)}
+                    aria-pressed={preset === item}
                     className={preset === item ? 'active' : ''}
                   >
                     {item}
