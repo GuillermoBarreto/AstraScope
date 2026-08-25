@@ -61,6 +61,70 @@ describe('App', () => {
     expect(screen.getByText('CATALOG SYNCING…')).toBeInTheDocument();
   });
 
+  it('recovers from a failed catalog sync without requiring a page reload', async () => {
+    const satellite = {
+      id: 'hubble-20580', name: 'HUBBLE SPACE TELESCOPE', noradId: 20580, objectId: '1990-037B', epoch: new Date().toISOString(),
+      inclination: 28.5, raan: 0, eccentricity: 0.0003, argPericenter: 0, meanAnomaly: 0, meanMotion: 15.1,
+      bstar: 0, meanMotionDot: 0, meanMotionDdot: 0, elementSetNo: 1, operator: 'NASA', orbit: 'LEO',
+      purpose: 'Science', countryCode: 'US', objectType: 'Payload', description: 'Space telescope.',
+    };
+    let catalogAttempts = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (!String(input).includes('satellites')) {
+        return Promise.resolve({ ok: false });
+      }
+      catalogAttempts += 1;
+      if (catalogAttempts === 1) return Promise.reject(new Error('offline'));
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ satellites: [satellite], total: 1, updatedAt: new Date().toISOString(), source: 'celestrak' }),
+      });
+    }));
+
+    render(<App />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Catalog unavailable');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry sync' }));
+
+    expect(await screen.findByText('HUBBLE SPACE TELESCOPE')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(catalogAttempts).toBe(2);
+  });
+
+  it('clears search and closes satellite details with accessible keyboard controls', async () => {
+    const satellite = {
+      id: 'hubble-20580', name: 'HUBBLE SPACE TELESCOPE', noradId: 20580, objectId: '1990-037B', epoch: new Date().toISOString(),
+      inclination: 28.5, raan: 0, eccentricity: 0.0003, argPericenter: 0, meanAnomaly: 0, meanMotion: 15.1,
+      bstar: 0, meanMotionDot: 0, meanMotionDdot: 0, elementSetNo: 1, operator: 'NASA', orbit: 'LEO',
+      purpose: 'Science', countryCode: 'US', objectType: 'Payload', description: 'Space telescope.',
+    };
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(String(input).includes('satellites')
+        ? { satellites: [satellite], total: 1, updatedAt: new Date().toISOString(), source: 'celestrak' }
+        : { status: 'ok' }),
+    })));
+
+    render(<App />);
+    await screen.findByText('HUBBLE SPACE TELESCOPE');
+
+    const search = screen.getByRole('textbox', { name: 'Search satellite name or NORAD ID' });
+    fireEvent.change(search, { target: { value: 'hubble' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear satellite search' }));
+    expect(search).toHaveValue('');
+    expect(search).toHaveFocus();
+
+    search.blur();
+    fireEvent.click(screen.getByText('HUBBLE SPACE TELESCOPE'));
+    expect(window.location.search).toContain('satellite=hubble-20580');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('complementary', { name: 'Satellite catalog' })).toBeInTheDocument();
+    expect(window.location.search).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Science' }));
+    expect(screen.getByRole('button', { name: 'Science' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('renders Impact Watch, filters, and the hazardous classification', async () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
       const url = String(input);

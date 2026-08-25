@@ -46,6 +46,8 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [cameraMode, setCameraMode] = useState<'earth' | 'focus' | 'follow'>('earth');
   const [status, setStatus] = useState<'loading' | 'live' | 'offline'>('loading');
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogRequest, setCatalogRequest] = useState(0);
   const [source, setSource] = useState<SatelliteResponse['source']>('unavailable');
   const [upstream, setUpstream] = useState<SatelliteResponse['upstream']>(null);
   const [updatedAt, setUpdatedAt] = useState('');
@@ -57,12 +59,14 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([
-      fetch(apiUrl('/health'), { signal: controller.signal }),
-      fetch(apiUrl('/satellites'), { signal: controller.signal }),
-    ])
-      .then(([healthResponse, satellitesResponse]) => {
-        if (!healthResponse.ok) throw new Error('Health request failed');
+    setStatus('loading');
+    setCatalogError(false);
+
+    // Health telemetry is useful to the server, but it should never prevent a
+    // valid catalog response from reaching the workspace.
+    void fetch(apiUrl('/health'), { signal: controller.signal }).catch(() => undefined);
+    fetch(apiUrl('/satellites'), { signal: controller.signal })
+      .then((satellitesResponse) => {
         if (!satellitesResponse.ok) throw new Error('Catalog request failed');
         return satellitesResponse.json() as Promise<SatelliteResponse>;
       })
@@ -76,9 +80,10 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         setStatus('offline');
+        setCatalogError(true);
       });
     return () => controller.abort();
-  }, []);
+  }, [catalogRequest]);
 
   useEffect(() => {
     lastTick.current = Date.now();
@@ -96,7 +101,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   }, [favorites]);
 
   useEffect(() => {
-    const focusSearch = (event: KeyboardEvent) => {
+    const handleKeyboardShortcut = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       const typing =
         target.tagName === 'INPUT' ||
@@ -109,11 +114,18 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       } else if (event.key === 'Escape' && document.activeElement === searchRef.current) {
         setQuery('');
         searchRef.current?.blur();
+      } else if (event.key === 'Escape' && (selectedId || compareIds.length > 0)) {
+        setCompareIds([]);
+        setSelectedId(null);
+        setCameraMode('earth');
+        const url = new URL(window.location.href);
+        url.searchParams.delete('satellite');
+        window.history.replaceState({}, '', url);
       }
     };
-    window.addEventListener('keydown', focusSearch);
-    return () => window.removeEventListener('keydown', focusSearch);
-  }, []);
+    window.addEventListener('keydown', handleKeyboardShortcut);
+    return () => window.removeEventListener('keydown', handleKeyboardShortcut);
+  }, [compareIds.length, selectedId]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -208,9 +220,23 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                   placeholder="Search satellite / NORAD"
                   className="catalog-search"
                 />
-                <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-500">
-                  /
-                </kbd>
+                {query ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery('');
+                      searchRef.current?.focus();
+                    }}
+                    aria-label="Clear satellite search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                  >
+                    Clear
+                  </button>
+                ) : (
+                  <kbd aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-500">
+                    /
+                  </kbd>
+                )}
               </label>
               <Filter
                 label="Mission"
@@ -238,6 +264,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                   <button
                     key={item}
                     onClick={() => setPreset(item)}
+                    aria-pressed={preset === item}
                     className={preset === item ? 'active' : ''}
                   >
                     {item}
@@ -257,6 +284,14 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               </div>
           </div>
         </section>
+        {catalogError && (
+          <div className="catalog-alert" role="alert">
+            <span>
+              <strong>Catalog unavailable.</strong> Check your connection or try syncing again.
+            </span>
+            <button onClick={() => setCatalogRequest((request) => request + 1)}>Retry sync</button>
+          </div>
+        )}
         <section className={`workspace-grid ${selected ? 'has-selection' : ''}`}>
           <div className="visualization-pane">
             <div id="satellite-scene">

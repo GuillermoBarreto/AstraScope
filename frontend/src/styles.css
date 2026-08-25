@@ -54,6 +54,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .catalog-telemetry strong { color: #cbd5e1; font-weight: 650; }.catalog-telemetry b { padding: 0 4px; color: #334155; }
 .telemetry-skeleton { display: inline-block; width: 32px; height: 7px; margin-right: 6px; background: #1e293b; animation: telemetry-pulse 1.5s ease-in-out infinite; }
 @keyframes telemetry-pulse { 50% { opacity: .35; } }
+.catalog-alert { min-height: 42px; padding: 8px 12px; border: 1px solid rgba(251,113,133,.35); border-top: 0; background: rgba(76,5,25,.35); color: #fecdd3; display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 11px; }
+.catalog-alert strong { color: #fff1f2; }
+.catalog-alert button { flex: 0 0 auto; padding: 6px 10px; border: 1px solid rgba(251,113,133,.45); border-radius: 3px; background: rgba(136,19,55,.35); color: #ffe4e6; cursor: pointer; }
+.catalog-alert button:hover { background: rgba(159,18,57,.55); }
 
 .workspace-grid { display: grid; grid-template-columns: minmax(0,1fr) 360px; min-height: calc(100vh - 164px); border: 1px solid #1e293b; border-top: 0; }
 .visualization-pane { min-width: 0; display: flex; flex-direction: column; background: #030711; }
