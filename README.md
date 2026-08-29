@@ -61,6 +61,8 @@ Selecting a spacecraft opens a responsive detail panel with its propagated posit
 
 Actions include a smooth one-shot focus, continuous follow mode with an explicit exit, orbit-aware View Orbit framing, Watchlist add/remove, copy a canonical `?satellite=…` share link, and open an authoritative source. The device-local Watchlist preserves existing AstraScope storage and legacy OrbiWatch migration. The default globe prioritizes active payloads; optional rocket-body and debris layers do not limit full public-catalog search. When an observer location is set, the panel shows passes above 10°, including rise/set time, duration, maximum elevation, range, and propagated directions. These are orbital passes, not guarantees of naked-eye visibility.
 
+On phones, selecting an object opens a non-modal peek sheet so the globe remains usable. The sheet can be expanded for independently scrollable details, collapsed without clearing selection, or closed to return fully to the map. Dynamic viewport units and iOS safe-area insets keep controls clear of Safari browser chrome and the home indicator.
+
 Imagery is deliberately limited to a reviewed metadata map for notable spacecraft and families (ISS, Hubble, Landsat, NOAA, GPS, Starlink, and Sentinel). Verified imagery includes an explicit credit and source link. Other objects use compact category-based AstraScope fallback artwork; the same fallback replaces any image that fails to load. Metadata is static and cached with the catalog—AstraScope does not scrape image search or invent missing launch facts. Public orbital catalogs remain incomplete, propagated positions become less reliable as elements age, and generic constellation descriptions do not identify an individual spacecraft's exact mission.
 
 ## Impact Watch

@@ -34,6 +34,7 @@ const LEGACY_OBSERVER_KEY = 'orbitwatch-observer';
 type Preset = (typeof PRESETS)[number];
 type Sort = (typeof SORTS)[number];
 type CatalogMode = (typeof CATALOG_MODES)[number];
+type MobileInspectorState = 'peek' | 'expanded';
 
 function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [catalog, setCatalog] = useState<Satellite[]>([]);
@@ -55,6 +56,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [sort, setSort] = useState<Sort>('Name');
   const [favorites, setFavorites] = useState<Set<string>>(() => readFavorites());
   const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [mobileInspectorState, setMobileInspectorState] = useState<MobileInspectorState>('peek');
   const [cameraMode, setCameraMode] = useState<'earth' | 'focus' | 'follow' | 'orbit'>('earth');
   const [status, setStatus] = useState<'loading' | 'live' | 'offline'>('loading');
   const [catalogError, setCatalogError] = useState(false);
@@ -265,6 +267,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
 
   const selectSatellite = (id: string | null) => {
     setSelectedId(id);
+    if (id) setMobileInspectorState('peek');
     setCameraMode('earth');
     const url = new URL(window.location.href);
     if (id) url.searchParams.set('satellite', id);
@@ -424,7 +427,11 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
             </div>
           </div>
 
-          <aside aria-label={selected ? 'Satellite details' : 'Satellite catalog'} className={`object-inspector ${selected ? 'object-inspector--open' : ''}`}>
+          <aside
+            id="selected-object-inspector"
+            aria-label={selected ? 'Satellite details' : 'Satellite catalog'}
+            className={`object-inspector ${selected ? `object-inspector--open object-inspector--${mobileInspectorState}` : ''}`}
+          >
             {comparison.length === 2 ? (
               <SatelliteComparison
                 satellites={[comparison[0], comparison[1]]}
@@ -446,6 +453,9 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 onFocus={() => setCameraMode('focus')}
                 onFollow={() => setCameraMode((mode) => mode === 'follow' ? 'earth' : 'follow')}
                 onViewOrbit={() => setCameraMode('orbit')}
+                mobileInspectorState={mobileInspectorState}
+                onExpand={() => setMobileInspectorState('expanded')}
+                onCollapse={() => setMobileInspectorState('peek')}
                 onClose={() => selectSatellite(null)}
               />
             ) : catalogMode === 'All Public Catalog' ? (
@@ -825,6 +835,9 @@ function SatelliteDetails({
   onFocus,
   onFollow,
   onViewOrbit,
+  mobileInspectorState,
+  onExpand,
+  onCollapse,
   onClose,
 }: {
   satellite: Satellite;
@@ -836,6 +849,9 @@ function SatelliteDetails({
   onFocus: () => void;
   onFollow: () => void;
   onViewOrbit: () => void;
+  mobileInspectorState: MobileInspectorState;
+  onExpand: () => void;
+  onCollapse: () => void;
   onClose: () => void;
 }) {
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -863,7 +879,17 @@ function SatelliteDetails({
   };
   return (
     <article aria-labelledby="satellite-details-title">
-      <button onClick={onClose} className="text-xs text-cyan-400 hover:text-cyan-300">
+      <MobileInspectorHeader
+        satellite={satellite}
+        altitude={altitude}
+        velocity={velocity}
+        state={mobileInspectorState}
+        onExpand={onExpand}
+        onCollapse={onCollapse}
+        onClose={onClose}
+      />
+      <div id="selected-object-inspector-details" className="inspector-detail-content">
+      <button onClick={onClose} className="desktop-inspector-back text-xs text-cyan-400 hover:text-cyan-300">
         ← Back to catalog
       </button>
       <p className="mt-6 text-xs uppercase tracking-[0.25em] text-cyan-400">Selected object</p>
@@ -969,7 +995,54 @@ function SatelliteDetails({
       <p className="mt-6 border-t border-slate-800 pt-5 text-xs leading-5 text-slate-500">
         Positions use SGP4/SDP4 public orbital elements. Not for navigation or collision avoidance.
       </p>
+      </div>
     </article>
+  );
+}
+
+function MobileInspectorHeader({
+  satellite,
+  altitude,
+  velocity,
+  state,
+  onExpand,
+  onCollapse,
+  onClose,
+}: {
+  satellite: Satellite;
+  altitude: number | null;
+  velocity: number | null;
+  state: MobileInspectorState;
+  onExpand: () => void;
+  onCollapse: () => void;
+  onClose: () => void;
+}) {
+  const expanded = state === 'expanded';
+  return (
+    <header className="mobile-inspector-header">
+      <span className="mobile-sheet-handle" aria-hidden="true" />
+      <div className="mobile-inspector-title-row">
+        <div className="min-w-0">
+          <span className="mobile-inspector-kicker">Selected object</span>
+          <strong>{satellite.name}</strong>
+          <small>{objectLabel(satellite)} · {satellite.orbit}</small>
+        </div>
+        <button type="button" onClick={onClose} aria-label={`Close ${satellite.name} details and return to map`} className="mobile-sheet-close">×</button>
+      </div>
+      <div className="mobile-inspector-telemetry" aria-label="Selected object summary">
+        <span><small>Altitude</small><strong>{altitude == null ? '—' : `${altitude.toLocaleString()} km`}</strong></span>
+        <span><small>Velocity</small><strong>{velocity == null ? '—' : `${velocity.toFixed(2)} km/s`}</strong></span>
+        <button
+          type="button"
+          onClick={expanded ? onCollapse : onExpand}
+          aria-expanded={expanded}
+          aria-controls="selected-object-inspector-details"
+          className="mobile-sheet-toggle"
+        >
+          {expanded ? 'Collapse ↓' : 'View details ↑'}
+        </button>
+      </div>
+    </header>
   );
 }
 
