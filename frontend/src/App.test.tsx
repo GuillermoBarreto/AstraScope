@@ -32,6 +32,18 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByText('ISS (ZARYA)')).toBeInTheDocument());
     fireEvent.click(screen.getByText('ISS (ZARYA)'));
     expect(screen.getByRole('heading', { name: 'ISS (ZARYA)' })).toBeInTheDocument();
+    const inspector = screen.getByRole('complementary', { name: 'Satellite details' });
+    expect(inspector).toHaveClass('object-inspector--peek');
+    expect(screen.getByLabelText('3D Earth scene')).toBeInTheDocument();
+    const detailsToggle = screen.getByRole('button', { name: 'View details ↑' });
+    expect(detailsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(detailsToggle).toHaveAttribute('aria-controls', 'selected-object-inspector-details');
+    fireEvent.click(detailsToggle);
+    expect(inspector).toHaveClass('object-inspector--expanded');
+    const collapse = screen.getByRole('button', { name: 'Collapse ↓' });
+    expect(collapse).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(collapse);
+    expect(inspector).toHaveClass('object-inspector--peek');
     expect(screen.getByText('A crewed research laboratory.')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: /no public image available/i })).toBeInTheDocument();
     expect(screen.getByText(/not a depiction of this object/i)).toBeInTheDocument();
@@ -52,6 +64,31 @@ describe('App', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('satellite=iss-25544')));
     fireEvent.click(screen.getByRole('button', { name: 'Remove ISS (ZARYA) from Watchlist' }));
     await waitFor(() => expect(JSON.parse(localStorage.getItem('astrascope-favorites') ?? '[]')).not.toContain('iss-25544'));
+  });
+
+  it('opens a deep-linked selection in peek state and closes it without reloading', async () => {
+    const satellite = {
+      id: 'ufo-6-usa-114-23696', name: 'UFO 6 (USA 114)', noradId: 23696, objectId: '1995-035A', epoch: new Date().toISOString(),
+      inclination: 4.9, raan: 0, eccentricity: 0.0002, argPericenter: 0, meanAnomaly: 0, meanMotion: 1.0027,
+      bstar: 0, meanMotionDot: 0, meanMotionDdot: 0, elementSetNo: 1, operator: 'USSF', orbit: 'GEO',
+      purpose: 'Communications', countryCode: 'US', objectType: 'PAYLOAD', operationalStatus: 'ACTIVE',
+    };
+    window.history.replaceState({}, '', '/?satellite=ufo-6-usa-114-23696');
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(String(input).includes('/satellites')
+        ? { satellites: [satellite], total: 1, updatedAt: new Date().toISOString(), source: 'celestrak' }
+        : { status: 'ok' }),
+    })));
+
+    render(<App />);
+
+    const inspector = await screen.findByRole('complementary', { name: 'Satellite details' });
+    expect(inspector).toHaveClass('object-inspector--peek');
+    expect(screen.getByLabelText('3D Earth scene')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Close UFO 6 .* details and return to map/i }));
+    expect(screen.getByRole('complementary', { name: 'Satellite catalog' })).toBeInTheDocument();
+    expect(window.location.search).toBe('');
   });
 
   it('renders the AstraScope globe experience', () => {
