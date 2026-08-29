@@ -61,6 +61,18 @@ describe('App', () => {
     expect(screen.getByText('CATALOG SYNCING…')).toBeInTheDocument();
   });
 
+  it('ignores malformed persisted preferences instead of crashing the workspace', () => {
+    localStorage.setItem('astrascope-observer', JSON.stringify({ latitude: 250, longitude: 20 }));
+    localStorage.setItem('astrascope-favorites', JSON.stringify([null, 42, 'iss-25544']));
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
+
+    render(<App />);
+
+    expect(screen.getByLabelText('AstraScope')).toBeInTheDocument();
+    expect(screen.queryByText(/250\.000°/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'WATCHLIST 1' })).toBeInTheDocument();
+  });
+
   it('recovers from a failed catalog sync without requiring a page reload', async () => {
     const satellite = {
       id: 'hubble-20580', name: 'HUBBLE SPACE TELESCOPE', noradId: 20580, objectId: '1990-037B', epoch: new Date().toISOString(),

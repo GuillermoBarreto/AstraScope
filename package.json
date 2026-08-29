@@ -8,6 +8,8 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build",
     "lint:frontend": "npm --prefix frontend run lint",
+    "test:frontend": "npm --prefix frontend test -- --run",
+    "check:frontend": "npm run lint:frontend && npm run build:frontend && npm run test:frontend",
     "dev:backend": "python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000"
   }
 }

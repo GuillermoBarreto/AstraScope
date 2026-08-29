@@ -6,7 +6,6 @@ Formerly OrbiWatch.
 
 AstraScope is an interactive space-monitoring platform built with React, Three.js, and FastAPI. Explore Earth's orbital neighborhood and near-space activity in real time through satellite tracking, near-Earth object close approaches, and reconstructed atmospheric fireball events.
 
-adding words for repo
 ## Features
 
 - the complete public CelesTrak active catalog with automatic SatNOGS fallback
@@ -75,9 +74,11 @@ Open http://127.0.0.1:5173. The API health check is at http://127.0.0.1:8000/api
 ```powershell
 npm run lint:frontend
 npm run build:frontend
-npm --prefix frontend test -- --run
+npm run test:frontend
 python -m pytest backend/tests -q
 ```
+
+Run the complete frontend validation suite with `npm run check:frontend`.
 
 ## Deployment
 
