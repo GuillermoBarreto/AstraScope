@@ -652,7 +652,10 @@ def catalog_orbits(
     response = list_satellites()
     records = response["satellites"]
     if mode == "active":
-        records = [item for item in records if item["objectType"] == "PAYLOAD"]
+        records = [
+            item for item in records
+            if item["objectType"] == "PAYLOAD" and item.get("operationalStatus") == "ACTIVE"
+        ]
     if not debris:
         records = [item for item in records if item["objectType"] != "DEBRIS"]
     if not rocket_bodies:

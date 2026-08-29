@@ -3,7 +3,7 @@ import { Scene } from '@/components/Scene/Scene';
 import type { CatalogObject, Observer, Satellite, SatelliteResponse } from '@/types/satellite';
 import { apiUrl } from '@/utils/api';
 import { altitudeKm, compassDirection, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
-import { canonicalSatelliteUrl, formatPeriod, formatVelocity, fallbackKind } from '@/utils/satelliteDetails';
+import { canonicalSatelliteUrl, formatPeriod, formatVelocity } from '@/utils/satelliteDetails';
 import { skyTonightPasses } from '@/utils/skyTonight';
 import { calendarFilename, satellitePassCalendar } from '@/utils/calendar';
 import { createWatchlistBackup, parseWatchlistBackup } from '@/utils/watchlistBackup';
@@ -28,6 +28,7 @@ const SORTS = ['Name', 'Altitude', 'Inclination'] as const;
 const CATALOG_MODES = ['Active Satellites', 'On-Orbit Objects', 'All Public Catalog'] as const;
 const FAVORITES_KEY = 'astrascope-favorites';
 const OBSERVER_KEY = 'astrascope-observer';
+const LAYERS_KEY = 'astrascope-object-layers';
 const LEGACY_FAVORITES_KEY = 'orbitwatch-favorites';
 const LEGACY_OBSERVER_KEY = 'orbitwatch-observer';
 type Preset = (typeof PRESETS)[number];
@@ -41,8 +42,9 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [publicObjects, setPublicObjects] = useState<CatalogObject[]>([]);
   const [publicTotal, setPublicTotal] = useState(0);
   const [publicLoading, setPublicLoading] = useState(false);
-  const [showDebris, setShowDebris] = useState(false);
-  const [showRocketBodies, setShowRocketBodies] = useState(false);
+  const initialLayers = useMemo(readObjectLayers, []);
+  const [showDebris, setShowDebris] = useState(initialLayers.debris);
+  const [showRocketBodies, setShowRocketBodies] = useState(initialLayers.rocketBodies);
   const [query, setQuery] = useState('');
   const [operator, setOperator] = useState('All');
   const [orbit, setOrbit] = useState('All');
@@ -53,7 +55,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [sort, setSort] = useState<Sort>('Name');
   const [favorites, setFavorites] = useState<Set<string>>(() => readFavorites());
   const [compareIds, setCompareIds] = useState<string[]>([]);
-  const [cameraMode, setCameraMode] = useState<'earth' | 'focus' | 'follow'>('earth');
+  const [cameraMode, setCameraMode] = useState<'earth' | 'focus' | 'follow' | 'orbit'>('earth');
   const [status, setStatus] = useState<'loading' | 'live' | 'offline'>('loading');
   const [catalogError, setCatalogError] = useState(false);
   const [catalogRequest, setCatalogRequest] = useState(0);
@@ -65,6 +67,22 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [observer, setObserver] = useState<Observer | null>(() => readObserver());
   const lastTick = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!selectedId || catalog.some((item) => item.id === selectedId)) return;
+    const noradId = Number(selectedId.match(/-(\d+)$/)?.[1]);
+    if (!Number.isFinite(noradId)) return;
+    const controller = new AbortController();
+    fetch(apiUrl(`/catalog/objects/${noradId}`), { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('Deep link lookup failed')))
+      .then((payload: { object?: CatalogObject & Partial<Satellite> }) => {
+        if (payload.object?.hasOrbitalData && payload.object.meanMotion) {
+          setCatalog((current) => [...current.filter((item) => item.id !== payload.object!.id), payload.object as Satellite]);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [catalog, selectedId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -120,8 +138,8 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         .finally(() => setPublicLoading(false));
     } else {
       const params = new URLSearchParams({ mode: 'on-orbit' });
-      params.set('debris', String(showDebris));
-      params.set('rocket_bodies', String(showRocketBodies));
+      params.set('debris', 'true');
+      params.set('rocket_bodies', 'true');
       setStatus('loading');
       fetch(apiUrl(`/catalog/orbits?${params}`), { signal: controller.signal })
         .then((response) => {
@@ -140,7 +158,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         });
     }
     return () => controller.abort();
-  }, [activeCatalog, catalogMode, query, showDebris, showRocketBodies]);
+  }, [activeCatalog, catalogMode, query]);
 
   useEffect(() => {
     lastTick.current = Date.now();
@@ -156,6 +174,10 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   useEffect(() => {
     storeJson(FAVORITES_KEY, [...favorites]);
   }, [favorites]);
+
+  useEffect(() => {
+    storeJson(LAYERS_KEY, { debris: showDebris, rocketBodies: showRocketBodies });
+  }, [showDebris, showRocketBodies]);
 
   useEffect(() => {
     const handleKeyboardShortcut = (event: KeyboardEvent) => {
@@ -191,7 +213,11 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         !normalized ||
         satellite.name.toLowerCase().includes(normalized) ||
         String(satellite.noradId).includes(normalized);
+      const type = satellite.objectType.toUpperCase().replace(' ', '_');
+      const layerVisible = catalogMode !== 'On-Orbit Objects' ||
+        (type === 'DEBRIS' ? showDebris : type === 'ROCKET_BODY' ? showRocketBodies : true);
       return (
+        layerVisible &&
         matchesSearch &&
         (operator === 'All' || satellite.operator === operator) &&
         (orbit === 'All' || satellite.orbit === orbit) &&
@@ -205,9 +231,10 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           ? a.meanMotion - b.meanMotion
           : a.name.localeCompare(b.name),
     );
-  }, [catalog, favorites, operator, orbit, preset, query, sort]);
+  }, [catalog, catalogMode, favorites, operator, orbit, preset, query, showDebris, showRocketBodies, sort]);
 
   const selected = catalog.find((satellite) => satellite.id === selectedId) ?? null;
+  const rendered = selected && !filtered.some((item) => item.id === selected.id) ? [...filtered, selected] : filtered;
   const comparison = compareIds
     .map((id) => catalog.find((satellite) => satellite.id === id))
     .filter((satellite): satellite is Satellite => Boolean(satellite));
@@ -366,7 +393,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           <div className="visualization-pane">
             <div id="satellite-scene">
             <Scene
-              satellites={catalogMode === 'All Public Catalog' ? [] : filtered}
+              satellites={catalogMode === 'All Public Catalog' ? (selected ? [selected] : []) : rendered}
               selectedId={selectedId}
               onSelect={selectSatellite}
               time={simulationTime}
@@ -387,7 +414,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               <span aria-live="polite">
                 {catalogMode === 'All Public Catalog'
                   ? 'Browsing metadata · objects without GP elements are not rendered'
-                  : `${status === 'loading' ? 'Preparing orbital catalog…' : `Rendering ${filtered.length.toLocaleString()} of ${catalog.length.toLocaleString()} objects`} · SGP4/SDP4`}
+                  : `${status === 'loading' ? 'Preparing orbital catalog…' : `Rendering ${rendered.length.toLocaleString()} of ${catalog.length.toLocaleString()} objects`} · SGP4/SDP4`}
               </span>
               <span>
                 {updatedAt
@@ -418,10 +445,11 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 onFavorite={() => toggleFavorite(selected.id)}
                 onFocus={() => setCameraMode('focus')}
                 onFollow={() => setCameraMode((mode) => mode === 'follow' ? 'earth' : 'follow')}
+                onViewOrbit={() => setCameraMode('orbit')}
                 onClose={() => selectSatellite(null)}
               />
             ) : catalogMode === 'All Public Catalog' ? (
-              <PublicCatalogList objects={publicObjects} total={publicTotal} loading={publicLoading} />
+              <PublicCatalogList objects={publicObjects} total={publicTotal} loading={publicLoading} onInspectOrbital={(object) => { setCatalog((current) => [...current.filter((item) => item.id !== object.id), object]); selectSatellite(object.id); }} />
             ) : (
               <CatalogList
                 satellites={filtered}
@@ -550,10 +578,12 @@ function PublicCatalogList({
   objects,
   total,
   loading,
+  onInspectOrbital,
 }: {
   objects: CatalogObject[];
   total: number;
   loading: boolean;
+  onInspectOrbital: (object: Satellite) => void;
 }) {
   const [detail, setDetail] = useState<CatalogObject | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -565,7 +595,11 @@ function PublicCatalogList({
         if (!response.ok) throw new Error('Object detail request failed');
         return response.json() as Promise<{ object: CatalogObject | null }>;
       })
-      .then((payload) => setDetail(payload.object))
+      .then((payload) => {
+        setDetail(payload.object);
+        const object = payload.object as CatalogObject & Partial<Satellite> | null;
+        if (object?.hasOrbitalData && object.meanMotion) onInspectOrbital(object as Satellite);
+      })
       .catch(() => setDetail(null))
       .finally(() => setDetailLoading(false));
   };
@@ -790,16 +824,18 @@ function SatelliteDetails({
   onFavorite,
   onFocus,
   onFollow,
+  onViewOrbit,
   onClose,
 }: {
   satellite: Satellite;
   time: Date;
   observer: Observer | null;
   favorite: boolean;
-  cameraMode: 'earth' | 'focus' | 'follow';
+  cameraMode: 'earth' | 'focus' | 'follow' | 'orbit';
   onFavorite: () => void;
   onFocus: () => void;
   onFollow: () => void;
+  onViewOrbit: () => void;
   onClose: () => void;
 }) {
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -832,9 +868,7 @@ function SatelliteDetails({
       </button>
       <p className="mt-6 text-xs uppercase tracking-[0.25em] text-cyan-400">Selected object</p>
       <h2 id="satellite-details-title" className="mt-2 break-words text-3xl font-semibold">{satellite.name}</h2>
-      <p className="mt-2 text-sm text-slate-400">
-        {satellite.operator} · {satellite.purpose}
-      </p>
+      {meaningfulSummary(satellite) && <p className="mt-2 text-sm text-slate-400">{meaningfulSummary(satellite)}</p>}
       <section className="inspector-live" aria-label="Live satellite state">
         <div><span>ALTITUDE</span><strong>{altitude == null ? '—' : `${altitude.toLocaleString()} km`}</strong></div>
         <div><span>VELOCITY</span><strong>{formatVelocity(velocity)}</strong></div>
@@ -844,13 +878,14 @@ function SatelliteDetails({
         {satellite.imageUrl && !imageFailed ? (
           <img src={satellite.imageUrl} alt={satellite.imageAlt ?? satellite.name} onError={() => setImageFailed(true)} className="h-40 w-full object-cover sm:h-48" />
         ) : (
-          <div role="img" aria-label={`${satellite.purpose || fallbackKind(satellite)} satellite illustration`} className="grid h-36 place-items-center bg-[radial-gradient(circle,rgba(34,211,238,0.18),transparent_60%)]">
-            <span className="text-6xl" aria-hidden="true">🛰️</span>
-            <span className="sr-only">Category fallback artwork</span>
+          <div role="img" aria-label={`No public image available for ${satellite.name}`} className="technical-fallback">
+            <svg aria-hidden="true" viewBox="0 0 160 90"><path d="M64 34h32v22H64zM40 28h19v34H40zM101 28h19v34h-19zM80 15v19m0 22v19M56 45h8m32 0h8"/><circle cx="80" cy="45" r="8"/><path d="M25 72c28-17 82-17 110 0"/></svg>
+            <span>NO PUBLIC IMAGE AVAILABLE</span>
+            <small>{objectLabel(satellite)} · {satellite.orbit} · NORAD {satellite.noradId}</small>
           </div>
         )}
         <div className="flex items-center justify-between gap-3 px-3 py-2 text-[10px] text-slate-500">
-          <span>{satellite.imageCredit ?? `${satellite.purpose || 'AstraScope'} fallback artwork`}</span>
+          <span>{satellite.imageCredit ?? 'AstraScope technical placeholder — not a depiction of this object'}</span>
           {satellite.imageSourceUrl && !imageFailed && <a href={satellite.imageSourceUrl} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">Image source</a>}
         </div>
       </div>
@@ -870,8 +905,8 @@ function SatelliteDetails({
           {cameraMode === 'focus' ? 'Focusing…' : 'Focus'}
         </button>
         <button onClick={onFollow} aria-pressed={cameraMode === 'follow'} className={`rounded-lg border px-2 py-2 text-xs ${cameraMode === 'follow' ? 'border-amber-400 bg-amber-400 text-slate-950' : 'border-slate-700 text-slate-300'}`}>{cameraMode === 'follow' ? 'Exit follow' : 'Follow'}</button>
-        <button onClick={() => document.getElementById('satellite-scene')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} className="rounded-lg border border-slate-700 px-2 py-2 text-xs text-slate-300 hover:border-cyan-500">
-          View orbit
+        <button onClick={() => { onViewOrbit(); const scene = document.getElementById('satellite-scene'); if (typeof scene?.scrollIntoView === 'function') scene.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'center' }); }} aria-pressed={cameraMode === 'orbit'} className="rounded-lg border border-slate-700 px-2 py-2 text-xs text-slate-300 hover:border-cyan-500">
+          {cameraMode === 'orbit' ? 'Framing orbit…' : 'View orbit'}
         </button>
         <button
           onClick={share}
@@ -916,16 +951,12 @@ function SatelliteDetails({
                 >
                   <div className="flex justify-between">
                     <span className="text-slate-300">
-                      {pass.rise.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}–
-                      {pass.set.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatPassTime(pass.rise, pass.set)}
                     </span>
                     <span className="text-amber-300">{pass.maxElevation.toFixed(0)}° peak</span>
                   </div>
                   <p className="mt-1 text-slate-500">
-                    {pass.rise.toLocaleDateString()} · {Math.max(1, Math.round((pass.set.getTime() - pass.rise.getTime()) / 60_000))} min · {compassDirection(pass.riseAzimuth)} → {compassDirection(pass.setAzimuth)} · {Math.round(pass.rangeKm).toLocaleString()} km ·{' '}
-                    <span className={pass.visible ? 'text-emerald-400' : ''}>
-                      {pass.visible ? 'potentially visible' : 'daylight/shadow'}
-                    </span>
+                    {pass.rise.toLocaleDateString()} · {formatDuration(pass.set.getTime() - pass.rise.getTime())} · {compassDirection(pass.riseAzimuth)} → {compassDirection(pass.setAzimuth)} · {Math.round(pass.rangeKm).toLocaleString()} km · pass above horizon
                   </p>
                 </div>
               ))}
@@ -1064,7 +1095,7 @@ function SkyTonight({
     <section aria-labelledby="sky-tonight-title" className="mt-6 border-t border-slate-800 pt-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300">Visible passes</p>
+          <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300">Orbital passes</p>
           <h3 id="sky-tonight-title" className="mt-1 text-sm font-semibold">Sky Tonight</h3>
         </div>
         {observer && satellites.length > 0 && (
@@ -1075,7 +1106,7 @@ function SkyTonight({
       </div>
       {!observer ? (
         <p className="mt-2 text-xs leading-5 text-slate-500">
-          Set your observer location below to find visible Watchlist passes.
+          Set your observer location below to find Watchlist passes above the horizon.
         </p>
       ) : satellites.length === 0 ? (
         <p className="mt-2 text-xs leading-5 text-slate-500">
@@ -1083,7 +1114,7 @@ function SkyTonight({
         </p>
       ) : passes.length === 0 ? (
         <p className="mt-2 rounded-xl border border-dashed border-slate-700 p-3 text-xs leading-5 text-slate-500">
-          No potentially visible Watchlist passes are predicted in the next 24 hours.
+          No qualifying Watchlist passes are predicted in the next 24 hours.
         </p>
       ) : (
         <ol className="mt-3 space-y-2">
@@ -1106,7 +1137,7 @@ function SkyTonight({
                   </span>
                 </span>
                 <span className="mt-2 block text-[10px] text-slate-500">
-                  {compassDirection(pass.riseAzimuth)} → {compassDirection(pass.setAzimuth)} · potentially visible
+                  {compassDirection(pass.riseAzimuth)} → {compassDirection(pass.setAzimuth)} · pass above horizon
                 </span>
                 <span className="mt-3 flex gap-2 border-t border-slate-800 pt-2">
                   <button
@@ -1129,7 +1160,7 @@ function SkyTonight({
         </ol>
       )}
       <p className="mt-3 text-[10px] leading-4 text-slate-600">
-        Visibility is an estimate based on satellite illumination and local twilight.
+        Pass geometry uses public orbital elements. Illumination and twilight may be used for ranking; naked-eye visibility is not guaranteed.
       </p>
     </section>
   );
@@ -1264,11 +1295,40 @@ function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-xl bg-slate-950/70 p-3">
       <dt className="text-[10px] uppercase tracking-wider text-slate-500">{label}</dt>
-      <dd className="mt-1 truncate text-sm font-medium text-slate-200" title={value}>
+      <dd className="mt-1 break-words font-mono text-sm font-medium tabular-nums text-slate-200" title={value}>
         {value}
       </dd>
     </div>
   );
+}
+
+function objectLabel(satellite: Satellite) {
+  const type = satellite.objectType.toUpperCase().replace(' ', '_');
+  if (type === 'ROCKET_BODY') return 'Rocket body';
+  if (type === 'DEBRIS') return 'Debris';
+  if (type === 'PAYLOAD') return 'Payload';
+  return 'Orbital object';
+}
+
+function meaningfulSummary(satellite: Satellite) {
+  const values = [satellite.purpose, satellite.operator]
+    .filter((value) => value && !['other', 'unknown'].includes(value.toLowerCase()));
+  return values.length ? [...new Set(values)].join(' · ') : `${objectLabel(satellite)} · ${satellite.orbit}`;
+}
+
+function formatDuration(milliseconds: number) {
+  const seconds = Math.max(0, Math.round(milliseconds / 1000));
+  return seconds < 60 ? `${seconds} sec` : `${Math.floor(seconds / 60)} min ${seconds % 60} sec`;
+}
+
+function formatPassTime(start: Date, end: Date) {
+  const sameMinute = start.getHours() === end.getHours() && start.getMinutes() === end.getMinutes();
+  const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', ...(sameMinute ? { second: '2-digit' } : {}) };
+  return `${start.toLocaleTimeString([], options)} – ${end.toLocaleTimeString([], options)}`;
+}
+
+function prefersReducedMotion() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 function readObserver(): Observer | null {
@@ -1286,6 +1346,15 @@ function readFavorites(): Set<string> {
     return new Set(value ? (JSON.parse(value) as string[]) : []);
   } catch {
     return new Set();
+  }
+}
+
+function readObjectLayers() {
+  try {
+    const value = localStorage.getItem(LAYERS_KEY);
+    return value ? { debris: false, rocketBodies: false, ...JSON.parse(value) } : { debris: false, rocketBodies: false };
+  } catch {
+    return { debris: false, rocketBodies: false };
   }
 }
 

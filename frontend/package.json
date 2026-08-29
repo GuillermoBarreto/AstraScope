@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --max-warnings=0",
-    "test": "vitest"
+    "test": "vitest",
+    "benchmark:catalog": "node scripts/benchmark-catalog.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.2.0",

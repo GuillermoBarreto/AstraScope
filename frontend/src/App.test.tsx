@@ -33,7 +33,8 @@ describe('App', () => {
     fireEvent.click(screen.getByText('ISS (ZARYA)'));
     expect(screen.getByRole('heading', { name: 'ISS (ZARYA)' })).toBeInTheDocument();
     expect(screen.getByText('A crewed research laboratory.')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: /satellite illustration/i })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /no public image available/i })).toBeInTheDocument();
+    expect(screen.getByText(/not a depiction of this object/i)).toBeInTheDocument();
     expect(screen.getByText('Set your location to calculate upcoming passes.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '☆ Add to Watchlist' }));
     await waitFor(() => expect(JSON.parse(localStorage.getItem('astrascope-favorites') ?? '[]')).toContain('iss-25544'));
@@ -41,6 +42,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Focus' }));
     expect(screen.getByLabelText('3D Earth scene')).toHaveAttribute('data-camera-mode', 'focus');
     fireEvent.click(screen.getByRole('button', { name: 'Complete focus' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View orbit' }));
+    expect(screen.getByLabelText('3D Earth scene')).toHaveAttribute('data-camera-mode', 'orbit');
     fireEvent.click(screen.getByRole('button', { name: 'Follow' }));
     expect(screen.getByLabelText('3D Earth scene')).toHaveAttribute('data-camera-mode', 'follow');
     fireEvent.click(screen.getByRole('button', { name: 'Exit follow from scene' }));
