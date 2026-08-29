@@ -104,9 +104,11 @@ Open http://127.0.0.1:5173. The API health check is at http://127.0.0.1:8000/api
 ```powershell
 npm run lint:frontend
 npm run build:frontend
-npm --prefix frontend test -- --run
+npm run test:frontend
 python -m pytest backend/tests -q
 ```
+
+Run the complete frontend validation suite with `npm run check:frontend`.
 
 ## Deployment
 

@@ -1334,7 +1334,28 @@ function prefersReducedMotion() {
 function readObserver(): Observer | null {
   try {
     const value = localStorage.getItem(OBSERVER_KEY) ?? localStorage.getItem(LEGACY_OBSERVER_KEY);
-    return value ? (JSON.parse(value) as Observer) : null;
+    if (!value) return null;
+
+    const parsed: unknown = JSON.parse(value);
+    if (!isRecord(parsed)) return null;
+
+    const { latitude, longitude, altitudeKm, label } = parsed;
+    if (
+      typeof latitude !== 'number' ||
+      !Number.isFinite(latitude) ||
+      Math.abs(latitude) > 90 ||
+      typeof longitude !== 'number' ||
+      !Number.isFinite(longitude) ||
+      Math.abs(longitude) > 180 ||
+      typeof altitudeKm !== 'number' ||
+      !Number.isFinite(altitudeKm) ||
+      altitudeKm < 0 ||
+      typeof label !== 'string'
+    ) {
+      return null;
+    }
+
+    return { latitude, longitude, altitudeKm, label };
   } catch {
     return null;
   }
@@ -1343,7 +1364,9 @@ function readObserver(): Observer | null {
 function readFavorites(): Set<string> {
   try {
     const value = localStorage.getItem(FAVORITES_KEY) ?? localStorage.getItem(LEGACY_FAVORITES_KEY);
-    return new Set(value ? (JSON.parse(value) as string[]) : []);
+    if (!value) return new Set();
+    const parsed: unknown = JSON.parse(value);
+    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []);
   } catch {
     return new Set();
   }
@@ -1352,10 +1375,20 @@ function readFavorites(): Set<string> {
 function readObjectLayers() {
   try {
     const value = localStorage.getItem(LAYERS_KEY);
-    return value ? { debris: false, rocketBodies: false, ...JSON.parse(value) } : { debris: false, rocketBodies: false };
+    if (!value) return { debris: false, rocketBodies: false };
+    const parsed: unknown = JSON.parse(value);
+    if (!isRecord(parsed)) return { debris: false, rocketBodies: false };
+    return {
+      debris: typeof parsed.debris === 'boolean' ? parsed.debris : false,
+      rocketBodies: typeof parsed.rocketBodies === 'boolean' ? parsed.rocketBodies : false,
+    };
   } catch {
     return { debris: false, rocketBodies: false };
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 function matchesPreset(satellite: Satellite, preset: Preset, favorites: Set<string>): boolean {
