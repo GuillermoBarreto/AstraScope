@@ -1,4 +1,30 @@
-export type OrbitClass = 'LEO' | 'MEO' | 'GEO' | 'HEO';
+export type OrbitClass = 'LEO' | 'MEO' | 'GEO' | 'HEO' | 'OTHER';
+export type ObjectType = 'PAYLOAD' | 'ROCKET_BODY' | 'DEBRIS' | 'UNKNOWN';
+export type OperationalStatus = 'ACTIVE' | 'INACTIVE' | 'DECAYED' | 'UNKNOWN';
+
+export type CatalogObject = {
+  id: string;
+  noradId: number;
+  name: string;
+  internationalDesignator: string | null;
+  objectType: ObjectType;
+  operationalStatus: OperationalStatus;
+  isActive: boolean;
+  countryCode: string | null;
+  owner: string | null;
+  launchDate: string | null;
+  launchSite: string | null;
+  decayDate: string | null;
+  orbitalPeriodMinutes: number | null;
+  inclination: number | null;
+  apogeeKm: number | null;
+  perigeeKm: number | null;
+  orbitClass: OrbitClass;
+  hasOrbitalData: boolean;
+  dataStatus: string | null;
+  dataSources: Record<string, string>;
+  dataQuality: 'verified' | 'provider-supplied' | 'curated' | 'inferred';
+};
 
 export type Satellite = {
   id: string;
@@ -23,6 +49,10 @@ export type Satellite = {
   purpose: string;
   countryCode: string;
   objectType: string;
+  operationalStatus?: OperationalStatus;
+  internationalDesignator?: string | null;
+  hasOrbitalData?: boolean;
+  dataSources?: Record<string, string>;
   description?: string;
   launchDate?: string;
   launchVehicle?: string;

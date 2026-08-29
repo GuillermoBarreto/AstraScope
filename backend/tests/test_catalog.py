@@ -1,5 +1,10 @@
+import json
+import time
+
+from fastapi.testclient import TestClient
+
 import backend.main as main
-from backend.main import api_root, health_check, identify_operator, identify_purpose, normalize_satnogs, orbit_class
+from backend.main import api_root, health_check, identify_operator, identify_purpose, normalize, normalize_satcat, normalize_satnogs, object_type, operational_status, orbit_class
 from backend.app.data.satellite_metadata import curated_metadata
 from backend.app.core.config import Settings
 
@@ -19,6 +24,121 @@ def test_normalize_satnogs_tle() -> None:
     assert satellite["orbit"] == "LEO"
     assert satellite["purpose"] == "Crewed station"
     assert satellite["tle1"].startswith("1 25544")
+    assert satellite["dataSources"]["orbit"] == "satnogs"
+
+
+def satcat_record(**overrides):
+    record = {
+        "OBJECT_NAME": "ISS (ZARYA)",
+        "OBJECT_ID": "1998-067A",
+        "NORAD_CAT_ID": "25544",
+        "OBJECT_TYPE": "PAY",
+        "OPS_STATUS_CODE": "+",
+        "OWNER": "US",
+        "LAUNCH_DATE": "1998-11-20",
+        "LAUNCH_SITE": "TTMTR",
+        "DECAY_DATE": "",
+        "PERIOD": "92.9",
+        "INCLINATION": "51.64",
+        "APOGEE": "423",
+        "PERIGEE": "416",
+        "RCS": "399.05",
+        "DATA_STATUS_CODE": "",
+    }
+    record.update(overrides)
+    return record
+
+
+def test_normalize_celestrak_satcat_with_provenance() -> None:
+    item = normalize_satcat(satcat_record())
+    assert item["noradId"] == 25544
+    assert item["internationalDesignator"] == "1998-067A"
+    assert item["objectType"] == "PAYLOAD"
+    assert item["operationalStatus"] == "ACTIVE"
+    assert item["dataSources"] == {"catalog": "celestrak-satcat"}
+
+
+def test_object_type_and_status_classification() -> None:
+    assert object_type("PAY") == "PAYLOAD"
+    assert object_type("R/B") == "ROCKET_BODY"
+    assert object_type("DEB") == "DEBRIS"
+    assert object_type("something new") == "UNKNOWN"
+    assert operational_status("-") == "INACTIVE"
+    assert operational_status("+", "2020-01-01") == "DECAYED"
+
+
+def test_gp_normalization_preserves_six_digit_norad_id_and_source() -> None:
+    item = normalize({
+        "OBJECT_NAME": "SARAMAGO",
+        "OBJECT_ID": "2026-999A",
+        "NORAD_CAT_ID": 100123,
+        "EPOCH": "2026-08-01T00:00:00Z",
+        "MEAN_MOTION": 15.1,
+        "OBJECT_TYPE": "PAYLOAD",
+    }, "space-track")
+    assert item["noradId"] == 100123
+    assert item["dataSources"]["orbit"] == "space-track"
+
+
+def test_metadata_without_current_elements_is_not_propagable() -> None:
+    item = normalize_satcat(satcat_record(DATA_STATUS_CODE="NCE", PERIOD=""))
+    assert item["hasOrbitalData"] is False
+    assert item["orbitalPeriodMinutes"] is None
+
+
+def test_catalog_deduplication_identity_is_norad_not_name() -> None:
+    records = [normalize_satcat(satcat_record()), normalize_satcat(satcat_record(NORAD_CAT_ID="99999"))]
+    assert len({item["noradId"] for item in records}) == 2
+
+
+def test_catalog_search_and_filters_use_supported_metadata() -> None:
+    records = [
+        normalize_satcat(satcat_record()),
+        normalize_satcat(satcat_record(OBJECT_NAME="TEST R/B", OBJECT_ID="2020-001B", NORAD_CAT_ID="45000", OBJECT_TYPE="R/B", OPS_STATUS_CODE="-")),
+    ]
+    assert main.filter_catalog_objects(records, mode="all", search="1998-067A")[0]["noradId"] == 25544
+    assert main.filter_catalog_objects(records, mode="all", object_type_filter="ROCKET_BODY")[0]["noradId"] == 45000
+
+
+def test_catalog_pagination_and_page_size_validation(monkeypatch) -> None:
+    records = [normalize_satcat(satcat_record(NORAD_CAT_ID=str(1000 + index), OBJECT_NAME=f"OBJECT {index}")) for index in range(5)]
+    monkeypatch.setattr(main, "public_catalog", lambda: (records, "2026-08-29T00:00:00Z", "cache", None))
+    client = TestClient(main.app)
+    response = client.get("/catalog/objects?page=2&page_size=2")
+    assert response.status_code == 200
+    assert [item["noradId"] for item in response.json()["objects"]] == [1002, 1003]
+    assert client.get("/catalog/objects?page_size=501").status_code == 422
+
+
+def test_catalog_summary_uses_real_record_classifications(monkeypatch) -> None:
+    records = [
+        normalize_satcat(satcat_record()),
+        normalize_satcat(satcat_record(NORAD_CAT_ID="2", OBJECT_TYPE="R/B", OPS_STATUS_CODE="-")),
+        normalize_satcat(satcat_record(NORAD_CAT_ID="3", OBJECT_TYPE="DEB", OPS_STATUS_CODE="?")),
+    ]
+    monkeypatch.setattr(main, "public_catalog", lambda: (records, "now", "cache", None))
+    counts = main.catalog_summary()["counts"]
+    assert counts["activePayloads"] == 1
+    assert counts["rocketBodies"] == 1
+    assert counts["debris"] == 1
+
+
+def test_public_catalog_persistent_fallback(tmp_path, monkeypatch) -> None:
+    cache_file = tmp_path / "public-catalog.json"
+    monkeypatch.setattr(main, "PUBLIC_CATALOG_CACHE_FILE", cache_file)
+    expected = [normalize_satcat(satcat_record())]
+    main.write_public_catalog_cache(expected, "2026-08-29T00:00:00+00:00")
+    assert main.read_public_catalog_cache() == (expected, "2026-08-29T00:00:00+00:00")
+
+
+def test_large_catalog_serialization_benchmark() -> None:
+    fixture = [normalize_satcat(satcat_record(NORAD_CAT_ID=str(index + 1), OBJECT_NAME=f"OBJECT {index}")) for index in range(35_000)]
+    started = time.perf_counter()
+    payload = json.dumps({"objects": fixture}, separators=(",", ":"))
+    elapsed = time.perf_counter() - started
+    assert len(fixture) == 35_000
+    assert len(payload) < 30_000_000
+    assert elapsed < 5
 
 
 def test_catalog_classification() -> None:

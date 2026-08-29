@@ -6,7 +6,6 @@ Formerly OrbiWatch.
 
 AstraScope is an interactive space-monitoring platform built with React, Three.js, and FastAPI. Explore Earth's orbital neighborhood and near-space activity in real time through satellite tracking, near-Earth object close approaches, and reconstructed atmospheric fireball events.
 
-adding words for repo
 ## Features
 
 - the complete public CelesTrak active catalog with automatic SatNOGS fallback
@@ -25,6 +24,36 @@ adding words for repo
 - responsive desktop and mobile interface
 - split Vercel frontend and Render API deployment configuration
 - Impact Watch for upcoming near-Earth object approaches, potentially hazardous classifications, and recent atmospheric fireballs
+- Global Orbital Catalog modes for active satellites, propagable on-orbit objects, and the broader public SATCAT
+- rocket-body and opt-in debris visualization layers with GPU-instanced markers
+- paginated public-catalog search by name, NORAD ID, international designator, and owner
+
+## Global Orbital Catalog
+
+AstraScope separates orbital propagation data from catalog metadata so it can represent objects responsibly without inventing positions. **Active Satellites** remains the default and loads current propagable payloads. **On-Orbit Objects** can include inactive payloads and optional rocket-body and debris layers when the configured orbital provider supplies current GP elements. **All Public Catalog** searches CelesTrak SATCAT metadata, including records that have no current elements; those records are labeled “Orbital elements unavailable” and are not rendered on the globe.
+
+The API exposes separate, cache-aware concepts:
+
+- `GET /catalog/summary` — real provider-derived counts by object type and status
+- `GET /catalog/objects` — paginated metadata with mode, type, status, orbit, and search filters
+- `GET /catalog/search` — search alias for the paginated metadata endpoint
+- `GET /catalog/objects/{norad_id}` — selected-object metadata joined to cached orbital data
+- `GET /catalog/orbits` — lightweight propagable records for the globe
+- `GET /catalog/providers` — credential-safe provider health and last-success timestamps
+
+The legacy `GET /satellites` endpoint remains available for existing clients and deep links. Existing `?satellite=…` URLs and device-local Watchlists are preserved.
+
+AstraScope aggregates publicly available orbital data. Restricted, classified, newly launched, lost, or uncataloged objects may not be represented.
+
+## Data Sources
+
+- **CelesTrak GP** supplies public OMM-compatible general perturbations data. AstraScope uses structured JSON rather than relying exclusively on fixed-width TLEs, allowing modern NORAD catalog numbers above 99,999. Orbital downloads are cached for two hours.
+- **CelesTrak SATCAT** supplies the daily bulk public catalog used for object type, operational status, ownership, launch/decay, and catalog-orbit metadata. It is cached separately for 24 hours and joined by NORAD catalog number.
+- **Space-Track** is the preferred full GP source only when backend `SPACE_TRACK_IDENTITY` and `SPACE_TRACK_PASSWORD` credentials are configured. The application uses `class/gp`, never `gp_history`, persists successful results, and limits full-catalog refreshes to no more than hourly.
+- **SatNOGS DB** is an orbital fallback and a future on-demand radio enrichment source. SatNOGS data is available under CC BY-SA 4.0; transmitter data is not included in the bulk globe payload.
+- **ESA DISCOS** is not enabled in this release. It remains an optional authenticated enrichment source; AstraScope does not fail when DISCOS credentials are absent.
+
+Provider names are returned with records through `dataSources`. Provider credentials remain backend-only, are never placed in `VITE_` variables, and are not returned by provider-health APIs. The last successful local catalog remains available during transient provider outages. CelesTrak, Space-Track, SatNOGS, and ESA retain ownership of and set the usage terms for their respective data.
 
 ## Satellite Experience
 

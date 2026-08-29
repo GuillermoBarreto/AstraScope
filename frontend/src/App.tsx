@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Scene } from '@/components/Scene/Scene';
-import type { Observer, Satellite, SatelliteResponse } from '@/types/satellite';
+import type { CatalogObject, Observer, Satellite, SatelliteResponse } from '@/types/satellite';
 import { apiUrl } from '@/utils/api';
 import { altitudeKm, compassDirection, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satelliteVelocityKmS } from '@/utils/orbit';
 import { canonicalSatelliteUrl, formatPeriod, formatVelocity, fallbackKind } from '@/utils/satelliteDetails';
@@ -25,15 +25,24 @@ const PRESETS = [
   'Science',
 ] as const;
 const SORTS = ['Name', 'Altitude', 'Inclination'] as const;
+const CATALOG_MODES = ['Active Satellites', 'On-Orbit Objects', 'All Public Catalog'] as const;
 const FAVORITES_KEY = 'astrascope-favorites';
 const OBSERVER_KEY = 'astrascope-observer';
 const LEGACY_FAVORITES_KEY = 'orbitwatch-favorites';
 const LEGACY_OBSERVER_KEY = 'orbitwatch-observer';
 type Preset = (typeof PRESETS)[number];
 type Sort = (typeof SORTS)[number];
+type CatalogMode = (typeof CATALOG_MODES)[number];
 
 function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [catalog, setCatalog] = useState<Satellite[]>([]);
+  const [activeCatalog, setActiveCatalog] = useState<Satellite[]>([]);
+  const [catalogMode, setCatalogMode] = useState<CatalogMode>('Active Satellites');
+  const [publicObjects, setPublicObjects] = useState<CatalogObject[]>([]);
+  const [publicTotal, setPublicTotal] = useState(0);
+  const [publicLoading, setPublicLoading] = useState(false);
+  const [showDebris, setShowDebris] = useState(false);
+  const [showRocketBodies, setShowRocketBodies] = useState(false);
   const [query, setQuery] = useState('');
   const [operator, setOperator] = useState('All');
   const [orbit, setOrbit] = useState('All');
@@ -72,6 +81,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       })
       .then((payload) => {
         setCatalog(payload.satellites);
+        setActiveCatalog(payload.satellites);
         setUpdatedAt(payload.updatedAt);
         setSource(payload.source);
         setUpstream(payload.upstream ?? null);
@@ -84,6 +94,53 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       });
     return () => controller.abort();
   }, [catalogRequest]);
+
+  useEffect(() => {
+    if (catalogMode === 'Active Satellites') {
+      setCatalog(activeCatalog);
+      return;
+    }
+    const controller = new AbortController();
+    if (catalogMode === 'All Public Catalog') {
+      setPublicLoading(true);
+      const params = new URLSearchParams({ mode: 'all', page_size: '200' });
+      if (query.trim()) params.set('search', query.trim());
+      fetch(apiUrl(`/catalog/objects?${params}`), { signal: controller.signal })
+        .then((response) => {
+          if (!response.ok) throw new Error('Public catalog request failed');
+          return response.json() as Promise<{ objects: CatalogObject[]; total: number }>;
+        })
+        .then((payload) => {
+          setPublicObjects(payload.objects);
+          setPublicTotal(payload.total);
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof DOMException && error.name === 'AbortError')) setCatalogError(true);
+        })
+        .finally(() => setPublicLoading(false));
+    } else {
+      const params = new URLSearchParams({ mode: 'on-orbit' });
+      params.set('debris', String(showDebris));
+      params.set('rocket_bodies', String(showRocketBodies));
+      setStatus('loading');
+      fetch(apiUrl(`/catalog/orbits?${params}`), { signal: controller.signal })
+        .then((response) => {
+          if (!response.ok) throw new Error('Orbital catalog request failed');
+          return response.json() as Promise<{ objects: Satellite[]; updatedAt: string; source: SatelliteResponse['source']; upstream?: SatelliteResponse['upstream'] }>;
+        })
+        .then((payload) => {
+          setCatalog(payload.objects);
+          setUpdatedAt(payload.updatedAt);
+          setSource(payload.source);
+          setUpstream(payload.upstream ?? null);
+          setStatus('live');
+        })
+        .catch((error: unknown) => {
+          if (!(error instanceof DOMException && error.name === 'AbortError')) setStatus('offline');
+        });
+    }
+    return () => controller.abort();
+  }, [activeCatalog, catalogMode, query, showDebris, showRocketBodies]);
 
   useEffect(() => {
     lastTick.current = Date.now();
@@ -210,9 +267,16 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       <AppHeader active="satellite" onNavigate={onMode} status={status} statusLabel={catalogStatusLabel(status, source, upstream)} utc={simulationTime} watchlistCount={favorites.size} onWatchlist={() => setPreset('Watchlist')} />
       <div className="orbital-workspace">
         <section className="catalog-toolbar" aria-label="Satellite discovery controls">
+          <div className="catalog-modes" aria-label="Catalog mode">
+            {CATALOG_MODES.map((mode) => (
+              <button key={mode} aria-pressed={catalogMode === mode} onClick={() => setCatalogMode(mode)}>
+                {mode}
+              </button>
+            ))}
+          </div>
           <div className="catalog-controls">
               <label className="relative">
-                <span className="sr-only">Search satellite name or NORAD ID</span>
+                <span className="sr-only">Search object name, NORAD ID, or international designator</span>
                 <input
                   ref={searchRef}
                   value={query}
@@ -259,6 +323,12 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
               />
           </div>
           <div className="catalog-subbar">
+              {catalogMode === 'On-Orbit Objects' && (
+                <div className="mission-chips" aria-label="Orbital object layers">
+                  <button aria-pressed={showRocketBodies} className={showRocketBodies ? 'active' : ''} onClick={() => setShowRocketBodies((value) => !value)}>Rocket Bodies</button>
+                  <button aria-pressed={showDebris} className={showDebris ? 'active' : ''} onClick={() => setShowDebris((value) => !value)}>Debris layer</button>
+                </div>
+              )}
               <div className="mission-chips">
                 {PRESETS.filter((item) => !['All missions', 'Watchlist'].includes(item)).map((item) => (
                   <button
@@ -280,7 +350,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 </button>
               )}
               <div className="catalog-telemetry" aria-live="polite">
-                {status === 'loading' ? <><span className="telemetry-skeleton" /> CATALOG SYNCING…</> : <><strong>{catalog.length.toLocaleString()}</strong> OBJECTS <b>•</b> <strong>{filtered.length.toLocaleString()}</strong> DISPLAYED <b>•</b> {companyCount} OPERATORS {updatedAt && <><b>•</b> UPDATED {freshnessLabel(updatedAt)}</>}</>}
+                {catalogMode === 'All Public Catalog' ? <><strong>{publicTotal.toLocaleString()}</strong> SEARCHABLE PUBLIC OBJECTS</> : status === 'loading' ? <><span className="telemetry-skeleton" /> CATALOG SYNCING…</> : <><strong>{catalog.length.toLocaleString()}</strong> OBJECTS <b>•</b> <strong>{filtered.length.toLocaleString()}</strong> DISPLAYED <b>•</b> {companyCount} OPERATORS {updatedAt && <><b>•</b> UPDATED {freshnessLabel(updatedAt)}</>}</>}
               </div>
           </div>
         </section>
@@ -296,7 +366,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           <div className="visualization-pane">
             <div id="satellite-scene">
             <Scene
-              satellites={filtered}
+              satellites={catalogMode === 'All Public Catalog' ? [] : filtered}
               selectedId={selectedId}
               onSelect={selectSatellite}
               time={simulationTime}
@@ -315,7 +385,9 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
             />
             <div className="visualization-footer">
               <span aria-live="polite">
-                {status === 'loading' ? 'Preparing orbital catalog…' : `Rendering ${filtered.length.toLocaleString()} of ${catalog.length.toLocaleString()} objects`} · SGP4/SDP4
+                {catalogMode === 'All Public Catalog'
+                  ? 'Browsing metadata · objects without GP elements are not rendered'
+                  : `${status === 'loading' ? 'Preparing orbital catalog…' : `Rendering ${filtered.length.toLocaleString()} of ${catalog.length.toLocaleString()} objects`} · SGP4/SDP4`}
               </span>
               <span>
                 {updatedAt
@@ -348,6 +420,8 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
                 onFollow={() => setCameraMode((mode) => mode === 'follow' ? 'earth' : 'follow')}
                 onClose={() => selectSatellite(null)}
               />
+            ) : catalogMode === 'All Public Catalog' ? (
+              <PublicCatalogList objects={publicObjects} total={publicTotal} loading={publicLoading} />
             ) : (
               <CatalogList
                 satellites={filtered}
@@ -467,6 +541,82 @@ function TimeControls({
         >
           Now
         </button>
+      </div>
+    </section>
+  );
+}
+
+function PublicCatalogList({
+  objects,
+  total,
+  loading,
+}: {
+  objects: CatalogObject[];
+  total: number;
+  loading: boolean;
+}) {
+  const [detail, setDetail] = useState<CatalogObject | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const loadDetail = (noradId: number) => {
+    setDetailLoading(true);
+    fetch(apiUrl(`/catalog/objects/${noradId}`))
+      .then((response) => {
+        if (!response.ok) throw new Error('Object detail request failed');
+        return response.json() as Promise<{ object: CatalogObject | null }>;
+      })
+      .then((payload) => setDetail(payload.object))
+      .catch(() => setDetail(null))
+      .finally(() => setDetailLoading(false));
+  };
+
+  return (
+    <section aria-labelledby="public-catalog-title">
+      <p className="text-xs uppercase tracking-[0.25em] text-cyan-400">Global catalog</p>
+      <h2 id="public-catalog-title" className="mt-2 text-2xl font-semibold">Publicly cataloged objects</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-400">
+        Search metadata by object name, NORAD number, international designator, or owner. Objects without current GP data are never placed on the globe.
+      </p>
+      <p className="mt-3 text-xs text-slate-500">{total.toLocaleString()} matching records · showing up to 200</p>
+      {detail && (
+        <article className="mt-4 rounded-xl border border-cyan-700/60 bg-cyan-950/20 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div><p className="text-[10px] uppercase tracking-widest text-cyan-400">Object details</p><h3 className="mt-1 font-semibold">{detail.name}</h3></div>
+            <button aria-label="Close object details" onClick={() => setDetail(null)} className="text-slate-500 hover:text-slate-200">×</button>
+          </div>
+          <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div><dt className="text-slate-600">Owner</dt><dd className="mt-1 text-slate-300">{detail.owner ?? 'Unknown'}</dd></div>
+            <div><dt className="text-slate-600">Launch</dt><dd className="mt-1 text-slate-300">{detail.launchDate ?? 'Unknown'}</dd></div>
+            <div><dt className="text-slate-600">Apogee</dt><dd className="mt-1 text-slate-300">{detail.apogeeKm == null ? 'Unknown' : `${detail.apogeeKm.toLocaleString()} km`}</dd></div>
+            <div><dt className="text-slate-600">Perigee</dt><dd className="mt-1 text-slate-300">{detail.perigeeKm == null ? 'Unknown' : `${detail.perigeeKm.toLocaleString()} km`}</dd></div>
+          </dl>
+          <p className="mt-3 text-[10px] text-slate-500">Catalog · CelesTrak SATCAT{detail.dataSources.orbit ? ` · Orbit · ${detail.dataSources.orbit}` : ''}</p>
+        </article>
+      )}
+      <div className="mt-5 max-h-[600px] space-y-2 overflow-auto pr-1" aria-busy={loading}>
+        {(loading || detailLoading) && <p role="status" className="rounded-xl border border-slate-800 p-4 text-sm text-slate-400">Loading public catalog…</p>}
+        {!loading && objects.length === 0 && <p className="rounded-xl border border-dashed border-slate-700 p-5 text-sm text-slate-400">No public catalog objects match this search.</p>}
+        {!loading && objects.map((object) => (
+          <article key={object.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-medium text-slate-200">{object.name}</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  NORAD {object.noradId}{object.internationalDesignator ? ` · ${object.internationalDesignator}` : ''}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-slate-800 px-2 py-1 text-[10px] text-cyan-300">
+                {object.objectType.replace('_', ' ')}
+              </span>
+            </div>
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div><dt className="text-slate-600">Status</dt><dd className="mt-1 text-slate-300">{object.operationalStatus.toLowerCase()}</dd></div>
+              <div><dt className="text-slate-600">Orbit data</dt><dd className={`mt-1 ${object.hasOrbitalData ? 'text-emerald-300' : 'text-amber-300'}`}>{object.hasOrbitalData ? 'Provider indicates available' : 'Orbital elements unavailable'}</dd></div>
+            </dl>
+            <p className="mt-3 text-[10px] text-slate-600">Catalog source · CelesTrak SATCAT</p>
+            <button onClick={() => loadDetail(object.noradId)} className="mt-3 w-full rounded-lg bg-cyan-400/10 px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-400/20">Load details</button>
+          </article>
+        ))}
       </div>
     </section>
   );
