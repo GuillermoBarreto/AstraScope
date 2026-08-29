@@ -31,7 +31,7 @@ export function Satellites({ satellites, selectedId, onSelect, time }: Satellite
       dummy.scale.setScalar(selected ? 2.15 : hovered ? 1.6 : 1);
       dummy.updateMatrix();
       mesh.setMatrixAt(index, dummy.matrix);
-      const color = new THREE.Color(selected ? '#22d3ee' : hovered ? '#67e8f9' : operatorColor(satellite.operator));
+      const color = new THREE.Color(selected ? '#fbbf24' : hovered ? '#67e8f9' : objectColor(satellite));
       if (selectedIndex >= 0 && !selected && !hovered) color.multiplyScalar(0.42);
       mesh.setColorAt(index, color);
 
@@ -88,11 +88,12 @@ export function Satellites({ satellites, selectedId, onSelect, time }: Satellite
   );
 }
 
-function operatorColor(operator: string) {
-  if (operator === 'SpaceX') return '#67e8f9';
-  if (operator === 'Eutelsat OneWeb') return '#a78bfa';
-  if (operator === 'Amazon') return '#fb923c';
-  if (operator === 'Planet') return '#4ade80';
-  if (operator === 'NASA') return '#f87171';
+function objectColor(satellite: Satellite) {
+  const type = satellite.objectType.toUpperCase().replace(' ', '_');
+  if (type === 'ROCKET_BODY') return '#a78bfa';
+  if (type === 'DEBRIS') return '#64748b';
+  if (type === 'UNKNOWN') return '#78716c';
+  if (satellite.operationalStatus === 'INACTIVE') return '#60a5fa';
+  if (type === 'PAYLOAD' || type === 'PAYLOADS') return '#67e8f9';
   return '#94a3b8';
 }

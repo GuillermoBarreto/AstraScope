@@ -33,7 +33,8 @@ describe('App', () => {
     fireEvent.click(screen.getByText('ISS (ZARYA)'));
     expect(screen.getByRole('heading', { name: 'ISS (ZARYA)' })).toBeInTheDocument();
     expect(screen.getByText('A crewed research laboratory.')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: /satellite illustration/i })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /no public image available/i })).toBeInTheDocument();
+    expect(screen.getByText(/not a depiction of this object/i)).toBeInTheDocument();
     expect(screen.getByText('Set your location to calculate upcoming passes.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '☆ Add to Watchlist' }));
     await waitFor(() => expect(JSON.parse(localStorage.getItem('astrascope-favorites') ?? '[]')).toContain('iss-25544'));
@@ -41,6 +42,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Focus' }));
     expect(screen.getByLabelText('3D Earth scene')).toHaveAttribute('data-camera-mode', 'focus');
     fireEvent.click(screen.getByRole('button', { name: 'Complete focus' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View orbit' }));
+    expect(screen.getByLabelText('3D Earth scene')).toHaveAttribute('data-camera-mode', 'orbit');
     fireEvent.click(screen.getByRole('button', { name: 'Follow' }));
     expect(screen.getByLabelText('3D Earth scene')).toHaveAttribute('data-camera-mode', 'follow');
     fireEvent.click(screen.getByRole('button', { name: 'Exit follow from scene' }));
@@ -91,6 +94,7 @@ describe('App', () => {
   it('ignores malformed persisted preferences instead of crashing the workspace', () => {
     localStorage.setItem('astrascope-observer', JSON.stringify({ latitude: 250, longitude: 20 }));
     localStorage.setItem('astrascope-favorites', JSON.stringify([null, 42, 'iss-25544']));
+    localStorage.setItem('astrascope-object-layers', JSON.stringify({ debris: 'yes', rocketBodies: 1 }));
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
 
     render(<App />);
@@ -98,6 +102,9 @@ describe('App', () => {
     expect(screen.getByLabelText('AstraScope')).toBeInTheDocument();
     expect(screen.queryByText(/250\.000°/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'WATCHLIST 1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'On-Orbit Objects' }));
+    expect(screen.getByRole('button', { name: 'Debris layer' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Rocket Bodies' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('recovers from a failed catalog sync without requiring a page reload', async () => {

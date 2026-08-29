@@ -22,7 +22,7 @@ type SceneProps = {
   time: Date;
   observer: Observer | null;
   simulationMode: boolean;
-  cameraMode: 'earth' | 'focus' | 'follow';
+  cameraMode: 'earth' | 'focus' | 'follow' | 'orbit';
   onFocusComplete: () => void;
   onExitFollow: () => void;
 };
@@ -51,11 +51,11 @@ export function Scene({ satellites, selectedId, onSelect, time, observer, simula
       <div className="scene-instructions">
         Drag to orbit · Scroll to zoom · Hover or click a satellite
       </div>
-      <div className="scene-layers">
-        LAYERS · SATELLITES · ORBIT · CELESTIAL
+      <div className="scene-layers" aria-label="Object marker legend">
+        <span>● Active payload</span><span>◉ Selected</span><span>◆ Rocket body</span><span>· Debris</span>
       </div>
       <div className="scene-mode">
-        {cameraMode === 'follow' ? 'FOLLOW MODE' : cameraMode === 'focus' ? 'FOCUSING SATELLITE' : simulationMode ? 'SIMULATION MODE' : 'LIVE POSITION MODE'}
+        {cameraMode === 'follow' ? 'FOLLOW MODE' : cameraMode === 'focus' ? 'FOCUSING OBJECT' : cameraMode === 'orbit' ? 'FRAMING ORBIT' : simulationMode ? 'SIMULATION MODE' : 'LIVE POSITION MODE'}
       </div>
       {cameraMode === 'follow' && <button onClick={onExitFollow} className="absolute left-1/2 top-4 z-20 -translate-x-1/2 rounded-full bg-amber-400 px-4 py-2 text-xs font-bold text-slate-950 shadow-lg shadow-amber-950/40 focus:outline-none focus:ring-2 focus:ring-white">Exit follow</button>}
     </div>
