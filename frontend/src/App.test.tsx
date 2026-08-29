@@ -59,6 +59,33 @@ describe('App', () => {
     expect(screen.getByLabelText('AstraScope')).toBeInTheDocument();
     expect(screen.getByLabelText('Satellite discovery controls')).toBeInTheDocument();
     expect(screen.getByText('CATALOG SYNCING…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Active Satellites' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('switches catalog modes while keeping debris disabled by default', async () => {
+    const publicObject = {
+      id: 'norad-33757', noradId: 33757, name: 'COSMOS 2251 DEB', internationalDesignator: '1993-036AAB',
+      objectType: 'DEBRIS', operationalStatus: 'UNKNOWN', isActive: false, countryCode: 'CIS', owner: 'CIS',
+      launchDate: '1993-06-16', launchSite: 'PKMTR', decayDate: null, orbitalPeriodMinutes: null,
+      inclination: null, apogeeKm: null, perigeeKm: null, orbitClass: 'OTHER', hasOrbitalData: false,
+      dataStatus: 'NCE', dataSources: { catalog: 'celestrak-satcat' }, dataQuality: 'provider-supplied',
+    };
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/catalog/objects')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ objects: [publicObject], total: 1 }) });
+      if (url.includes('/catalog/orbits')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ objects: [], updatedAt: new Date().toISOString(), source: 'cache' }) });
+      if (url.includes('satellites')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ satellites: [], total: 0, updatedAt: new Date().toISOString(), source: 'celestrak' }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    }));
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'On-Orbit Objects' }));
+    expect(screen.getByRole('button', { name: 'Debris layer' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Rocket Bodies' })).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'All Public Catalog' }));
+    expect(await screen.findByText('COSMOS 2251 DEB')).toBeInTheDocument();
+    expect(screen.getByText('Orbital elements unavailable')).toBeInTheDocument();
   });
 
   it('ignores malformed persisted preferences instead of crashing the workspace', () => {
@@ -120,7 +147,7 @@ describe('App', () => {
     render(<App />);
     await screen.findByText('HUBBLE SPACE TELESCOPE');
 
-    const search = screen.getByRole('textbox', { name: 'Search satellite name or NORAD ID' });
+    const search = screen.getByRole('textbox', { name: 'Search object name, NORAD ID, or international designator' });
     fireEvent.change(search, { target: { value: 'hubble' } });
     fireEvent.click(screen.getByRole('button', { name: 'Clear satellite search' }));
     expect(search).toHaveValue('');

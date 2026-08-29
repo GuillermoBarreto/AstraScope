@@ -15,6 +15,7 @@ class Settings:
     )
     space_track_identity: str = os.getenv("SPACE_TRACK_IDENTITY", "")
     space_track_password: str = os.getenv("SPACE_TRACK_PASSWORD", "")
+    discos_token: str = os.getenv("DISCOS_TOKEN", "")
     nasa_api_key: str = os.getenv("NASA_API_KEY", "DEMO_KEY")
 
     def cors_origins_list(self) -> list[str]:
@@ -22,6 +23,9 @@ class Settings:
 
     def has_space_track_credentials(self) -> bool:
         return bool(self.space_track_identity and self.space_track_password)
+
+    def has_discos_credentials(self) -> bool:
+        return bool(self.discos_token)
 
 
 settings = Settings()
