@@ -195,6 +195,8 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       } else if (event.key === 'Escape' && document.activeElement === searchRef.current) {
         setQuery('');
         searchRef.current?.blur();
+      } else if (event.key === 'Escape' && selectedId && mobileInspectorState === 'expanded') {
+        setMobileInspectorState('peek');
       } else if (event.key === 'Escape' && (selectedId || compareIds.length > 0)) {
         setCompareIds([]);
         setSelectedId(null);
@@ -206,7 +208,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
     };
     window.addEventListener('keydown', handleKeyboardShortcut);
     return () => window.removeEventListener('keydown', handleKeyboardShortcut);
-  }, [compareIds.length, selectedId]);
+  }, [compareIds.length, mobileInspectorState, selectedId]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -427,6 +429,14 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
             </div>
           </div>
 
+          {selected && mobileInspectorState === 'expanded' && (
+            <button
+              type="button"
+              className="mobile-inspector-backdrop"
+              aria-label="Collapse satellite details"
+              onClick={() => setMobileInspectorState('peek')}
+            />
+          )}
           <aside
             id="selected-object-inspector"
             aria-label={selected ? 'Satellite details' : 'Satellite catalog'}

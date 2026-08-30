@@ -40,6 +40,7 @@ describe('App', () => {
     expect(detailsToggle).toHaveAttribute('aria-controls', 'selected-object-inspector-details');
     fireEvent.click(detailsToggle);
     expect(inspector).toHaveClass('object-inspector--expanded');
+    expect(screen.getByRole('button', { name: 'Collapse satellite details' })).toBeInTheDocument();
     const collapse = screen.getByRole('button', { name: 'Collapse ↓' });
     expect(collapse).toHaveAttribute('aria-expanded', 'true');
     fireEvent.click(collapse);
@@ -64,6 +65,29 @@ describe('App', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('satellite=iss-25544')));
     fireEvent.click(screen.getByRole('button', { name: 'Remove ISS (ZARYA) from Watchlist' }));
     await waitFor(() => expect(JSON.parse(localStorage.getItem('astrascope-favorites') ?? '[]')).not.toContain('iss-25544'));
+  });
+
+  it('steps an expanded inspector back to peek before Escape closes it', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ satellites: [{
+        id: 'iss-25544', name: 'ISS (ZARYA)', noradId: 25544, objectId: '1998-067A', epoch: new Date().toISOString(),
+        inclination: 51.6, raan: 0, eccentricity: 0.0007, argPericenter: 0, meanAnomaly: 0, meanMotion: 15.49,
+        bstar: 0, meanMotionDot: 0, meanMotionDdot: 0, elementSetNo: 1, operator: 'NASA', orbit: 'LEO',
+        purpose: 'Crewed station', countryCode: 'US', objectType: 'Payload',
+      }], total: 1, updatedAt: new Date().toISOString(), source: 'celestrak' }),
+    })));
+    render(<App />);
+    fireEvent.click(await screen.findByText('ISS (ZARYA)'));
+    const inspector = screen.getByRole('complementary', { name: 'Satellite details' });
+    fireEvent.click(screen.getByRole('button', { name: 'View details ↑' }));
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(inspector).toHaveClass('object-inspector--peek');
+    expect(screen.getByRole('complementary', { name: 'Satellite details' })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('complementary', { name: 'Satellite catalog' })).toBeInTheDocument();
   });
 
   it('opens a deep-linked selection in peek state and closes it without reloading', async () => {
