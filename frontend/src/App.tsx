@@ -69,6 +69,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [observer, setObserver] = useState<Observer | null>(() => readObserver());
   const lastTick = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const publicCatalogSearch = catalogMode === 'All Public Catalog' ? query.trim() : '';
 
   useEffect(() => {
     if (!selectedId || catalog.some((item) => item.id === selectedId)) return;
@@ -124,7 +125,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
     if (catalogMode === 'All Public Catalog') {
       setPublicLoading(true);
       const params = new URLSearchParams({ mode: 'all', page_size: '200' });
-      if (query.trim()) params.set('search', query.trim());
+      if (publicCatalogSearch) params.set('search', publicCatalogSearch);
       fetch(apiUrl(`/catalog/objects?${params}`), { signal: controller.signal })
         .then((response) => {
           if (!response.ok) throw new Error('Public catalog request failed');
@@ -160,7 +161,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         });
     }
     return () => controller.abort();
-  }, [activeCatalog, catalogMode, query]);
+  }, [activeCatalog, catalogMode, publicCatalogSearch]);
 
   useEffect(() => {
     lastTick.current = Date.now();

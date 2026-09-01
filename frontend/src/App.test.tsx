@@ -152,6 +152,32 @@ describe('App', () => {
     expect(screen.getByText('Orbital elements unavailable')).toBeInTheDocument();
   });
 
+  it('filters on-orbit objects without refetching the orbital catalog', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/catalog/orbits')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ objects: [], updatedAt: new Date().toISOString(), source: 'cache' }) });
+      }
+      if (url.includes('satellites')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ satellites: [], total: 0, updatedAt: new Date().toISOString(), source: 'celestrak' }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+    await screen.findByText('CELESTRAK LIVE');
+    fireEvent.click(screen.getByRole('button', { name: 'On-Orbit Objects' }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/catalog/orbits'))).toHaveLength(1));
+
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'Search object name, NORAD ID, or international designator' }),
+      { target: { value: 'cosmos' } },
+    );
+
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/catalog/orbits'))).toHaveLength(1));
+  });
+
   it('ignores malformed persisted preferences instead of crashing the workspace', () => {
     localStorage.setItem('astrascope-observer', JSON.stringify({ latitude: 250, longitude: 20 }));
     localStorage.setItem('astrascope-favorites', JSON.stringify([null, 42, 'iss-25544']));
