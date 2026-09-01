@@ -69,6 +69,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [observer, setObserver] = useState<Observer | null>(() => readObserver());
   const lastTick = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const publicCatalogSearch = catalogMode === 'All Public Catalog' ? query.trim() : '';
 
   useEffect(() => {
     if (!selectedId || catalog.some((item) => item.id === selectedId)) return;
@@ -124,7 +125,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
     if (catalogMode === 'All Public Catalog') {
       setPublicLoading(true);
       const params = new URLSearchParams({ mode: 'all', page_size: '200' });
-      if (query.trim()) params.set('search', query.trim());
+      if (publicCatalogSearch) params.set('search', publicCatalogSearch);
       fetch(apiUrl(`/catalog/objects?${params}`), { signal: controller.signal })
         .then((response) => {
           if (!response.ok) throw new Error('Public catalog request failed');
@@ -160,7 +161,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         });
     }
     return () => controller.abort();
-  }, [activeCatalog, catalogMode, query]);
+  }, [activeCatalog, catalogMode, publicCatalogSearch]);
 
   useEffect(() => {
     lastTick.current = Date.now();
@@ -195,6 +196,8 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       } else if (event.key === 'Escape' && document.activeElement === searchRef.current) {
         setQuery('');
         searchRef.current?.blur();
+      } else if (event.key === 'Escape' && selectedId && mobileInspectorState === 'expanded') {
+        setMobileInspectorState('peek');
       } else if (event.key === 'Escape' && (selectedId || compareIds.length > 0)) {
         setCompareIds([]);
         setSelectedId(null);
@@ -206,7 +209,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
     };
     window.addEventListener('keydown', handleKeyboardShortcut);
     return () => window.removeEventListener('keydown', handleKeyboardShortcut);
-  }, [compareIds.length, selectedId]);
+  }, [compareIds.length, mobileInspectorState, selectedId]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -427,6 +430,14 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
             </div>
           </div>
 
+          {selected && mobileInspectorState === 'expanded' && (
+            <button
+              type="button"
+              className="mobile-inspector-backdrop"
+              aria-label="Collapse satellite details"
+              onClick={() => setMobileInspectorState('peek')}
+            />
+          )}
           <aside
             id="selected-object-inspector"
             aria-label={selected ? 'Satellite details' : 'Satellite catalog'}
