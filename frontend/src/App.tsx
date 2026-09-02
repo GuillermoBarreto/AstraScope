@@ -72,6 +72,16 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const publicCatalogSearch = catalogMode === 'All Public Catalog' ? query.trim() : '';
 
   useEffect(() => {
+    const syncSelectionFromUrl = () => {
+      setSelectedId(new URLSearchParams(window.location.search).get('satellite'));
+      setMobileInspectorState('peek');
+      setCameraMode('earth');
+    };
+    window.addEventListener('popstate', syncSelectionFromUrl);
+    return () => window.removeEventListener('popstate', syncSelectionFromUrl);
+  }, []);
+
+  useEffect(() => {
     if (!selectedId || catalog.some((item) => item.id === selectedId)) return;
     const noradId = Number(selectedId.match(/-(\d+)$/)?.[1]);
     if (!Number.isFinite(noradId)) return;
@@ -275,7 +285,11 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
     const url = new URL(window.location.href);
     if (id) url.searchParams.set('satellite', id);
     else url.searchParams.delete('satellite');
-    window.history.replaceState({}, '', url);
+    if (id && id !== new URLSearchParams(window.location.search).get('satellite')) {
+      window.history.pushState({}, '', url);
+    } else {
+      window.history.replaceState({}, '', url);
+    }
   };
 
   const toggleFavorite = (id: string) =>
