@@ -203,6 +203,36 @@ describe('App', () => {
     await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/catalog/orbits'))).toHaveLength(1));
   });
 
+  it('debounces public catalog searches so rapid typing only requests the final query', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/catalog/objects')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ objects: [], total: 0 }) });
+      }
+      if (url.includes('satellites')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ satellites: [], total: 0, updatedAt: new Date().toISOString(), source: 'celestrak' }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok' }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'All Public Catalog' }));
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/catalog/objects'))).toHaveLength(1));
+
+    const search = screen.getByRole('textbox', { name: 'Search object name, NORAD ID, or international designator' });
+    fireEvent.change(search, { target: { value: 'co' } });
+    fireEvent.change(search, { target: { value: 'cosmos' } });
+
+    await waitFor(() => {
+      const requests = fetchMock.mock.calls
+        .map(([input]) => String(input))
+        .filter((url) => url.includes('/catalog/objects'));
+      expect(requests).toHaveLength(2);
+      expect(requests[1]).toContain('search=cosmos');
+    });
+  });
+
   it('ignores malformed persisted preferences instead of crashing the workspace', () => {
     localStorage.setItem('astrascope-observer', JSON.stringify({ latitude: 250, longitude: 20 }));
     localStorage.setItem('astrascope-favorites', JSON.stringify([null, 42, 'iss-25544']));
