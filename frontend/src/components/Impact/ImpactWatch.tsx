@@ -1,17 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ImpactScene } from './ImpactScene';
 import { AppHeader } from '@/components/AppHeader';
 import { freshnessLabel } from '@/utils/time';
-import type { Fireball, ImpactResponse, NearEarthObject } from '@/types/impact';
-import { apiUrl } from '@/utils/api';
+import type { Fireball, NearEarthObject } from '@/types/impact';
+import { useImpactFeed } from './useImpactFeed';
 
 const number = (value: number | null, digits = 1) => value === null ? 'Not reported' : value.toLocaleString(undefined, { maximumFractionDigits: digits });
 
 export function ImpactWatch({ onMode }: { onMode: () => void }) {
-  const [neos, setNeos] = useState<NearEarthObject[]>([]);
-  const [fireballs, setFireballs] = useState<Fireball[]>([]);
-  const [status, setStatus] = useState<'loading' | 'live' | 'offline'>('loading');
-  const [errors, setErrors] = useState<string[]>([]);
+  const [retry, setRetry] = useState(0);
   const [hazardousOnly, setHazardousOnly] = useState(false);
   const [minDiameter, setMinDiameter] = useState(0);
   const [neoDays, setNeoDays] = useState(7);
@@ -20,25 +17,13 @@ export function ImpactWatch({ onMode }: { onMode: () => void }) {
   const [coordinateFilter, setCoordinateFilter] = useState('all');
   const [selectedNeo, setSelectedNeo] = useState<string | null>(null);
   const [selectedFireball, setSelectedFireball] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState('');
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setStatus('loading');
-    Promise.all([
-      fetch(apiUrl(`/impact/neos?days=${neoDays}`), { signal: controller.signal }).then((response) => { if (!response.ok) throw new Error('NEO request failed'); return response.json() as Promise<ImpactResponse<'neos'>>; }),
-      fetch(apiUrl(`/impact/fireballs?days=${fireballDays}`), { signal: controller.signal }).then((response) => { if (!response.ok) throw new Error('Fireball request failed'); return response.json() as Promise<ImpactResponse<'fireballs'>>; }),
-    ]).then(([neoPayload, fireballPayload]) => {
-      setNeos(neoPayload.neos); setFireballs(fireballPayload.fireballs);
-      setUpdatedAt(fireballPayload.updatedAt || neoPayload.updatedAt);
-      const nextErrors = [neoPayload.error?.message, fireballPayload.error?.message].filter((item): item is string => Boolean(item));
-      setErrors(nextErrors); setStatus(nextErrors.length === 2 ? 'offline' : 'live');
-    }).catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      setErrors(['Impact data is temporarily unavailable.']); setStatus('offline');
-    });
-    return () => controller.abort();
-  }, [fireballDays, neoDays]);
+  const neoFeed = useImpactFeed('neos', neoDays, retry);
+  const fireballFeed = useImpactFeed('fireballs', fireballDays, retry);
+  const neos = useMemo(() => neoFeed.payload?.neos ?? [], [neoFeed.payload]);
+  const fireballs = useMemo(() => fireballFeed.payload?.fireballs ?? [], [fireballFeed.payload]);
+  const errors = [neoFeed.error && ('Near-Earth approaches: ' + neoFeed.error), fireballFeed.error && ('Fireballs: ' + fireballFeed.error)].filter(Boolean);
+  const status = neoFeed.loading || fireballFeed.loading ? 'loading' : errors.length === 2 ? 'offline' : 'live';
+  const updatedAt = [neoFeed.payload?.updatedAt, fireballFeed.payload?.updatedAt].filter((value): value is string => Boolean(value)).sort()[0] ?? '';
 
   const filteredNeos = useMemo(() => neos.filter((item) => (!hazardousOnly || item.potentiallyHazardous) && (item.estimatedDiameterMaxKm ?? 0) >= minDiameter), [hazardousOnly, minDiameter, neos]);
   const filteredFireballs = useMemo(() => fireballs.filter((item) => item.energy >= minEnergy && (coordinateFilter === 'all' || (coordinateFilter === 'available') === (item.latitude !== null && item.longitude !== null))), [coordinateFilter, fireballs, minEnergy]);
@@ -47,7 +32,7 @@ export function ImpactWatch({ onMode }: { onMode: () => void }) {
 
   return (
     <main className="orbital-app">
-      <AppHeader active="impact" onNavigate={onMode} status={status} statusLabel={status === 'loading' ? 'DATA SYNCING' : status === 'offline' ? 'SOURCES OFFLINE' : 'NASA / JPL LIVE'} utc={new Date()} />
+      <AppHeader active="impact" onNavigate={onMode} status={status} statusLabel={status === 'loading' ? 'DATA SYNCING' : status === 'offline' ? 'SOURCES OFFLINE' : errors.length ? 'PARTIAL DATA' : 'NASA / JPL LIVE'} utc={new Date()} />
       <div className="orbital-workspace">
         <section className="catalog-toolbar impact-toolbar" aria-label="Impact data controls">
           <div className="impact-title"><span>PLANETARY DEFENSE MONITOR</span><h1>Impact Watch</h1></div>
@@ -61,14 +46,14 @@ export function ImpactWatch({ onMode }: { onMode: () => void }) {
           </div>
           <div className="impact-telemetry" aria-live="polite">{status === 'loading' ? 'DATA SOURCES SYNCING…' : <><strong>{neos.length}</strong> APPROACHES · <strong>{hazardousCount}</strong> HAZARDOUS CLASSIFICATIONS · <strong>{fireballs.length}</strong> FIREBALLS {updatedAt && ` · UPDATED ${freshnessLabel(updatedAt)}`}</>}</div>
         </section>
-        {errors.length > 0 && <div role="alert" className="impact-alert">Some NASA/JPL data could not be loaded. {errors.join(' ')}</div>}
+        {errors.length > 0 && <div role="alert" className="impact-alert">Some NASA/JPL data could not be loaded. {errors.join(' ')} <button type="button" onClick={() => setRetry((value) => value + 1)} disabled={status === 'loading'}>Retry data</button></div>}
         <section className="workspace-grid impact-grid">
           <div className="visualization-pane">
             <ImpactScene events={filteredFireballs} selectedId={selectedFireball} onSelect={(id) => { setSelectedFireball(id); setSelectedNeo(null); }} />
             <p className="impact-context">Markers show reported fireball peak-brightness locations. No asteroid trajectories are drawn. Potentially hazardous classification does not predict an impact.</p>
           </div>
           <aside className={`object-inspector ${selected ? 'object-inspector--open' : ''}`}>
-            {selected ? <Details item={selected} onClose={() => { setSelectedNeo(null); setSelectedFireball(null); }} /> : <><ObjectList title="Near-Earth approaches" empty="No approaches match these filters.">{filteredNeos.map((item) => <button key={item.id} onClick={() => { setSelectedNeo(item.id); setSelectedFireball(null); }} className="impact-list-item"><span>{item.name}{item.potentiallyHazardous && <em>Potentially hazardous classification</em>}</span><small>{item.closeApproachDate} · {number(item.missDistanceLunar, 2)} lunar distances</small></button>)}</ObjectList><ObjectList title="Recent fireballs" empty="No fireballs match these filters.">{filteredFireballs.map((item) => <button key={item.id} onClick={() => { setSelectedFireball(item.id); setSelectedNeo(null); }} className="impact-list-item"><span>{new Date(item.dateTime).toLocaleString()}</span><small>{item.locationDescription ?? 'Location not reported'} · {number(item.impactEnergyKt, 3)} kt</small></button>)}</ObjectList></>}
+            {selected ? <Details item={selected} onClose={() => { setSelectedNeo(null); setSelectedFireball(null); }} /> : <><ObjectList title="Near-Earth approaches" empty={neoFeed.loading ? 'Loading approaches…' : neoFeed.error ? 'Approach data unavailable. Retry to load events.' : 'No approaches match these filters.'}>{filteredNeos.map((item) => <button key={item.id} onClick={() => { setSelectedNeo(item.id); setSelectedFireball(null); }} className="impact-list-item"><span>{item.name}{item.potentiallyHazardous && <em>Potentially hazardous classification</em>}</span><small>{item.closeApproachDate} · {number(item.missDistanceLunar, 2)} lunar distances</small></button>)}</ObjectList><ObjectList title="Recent fireballs" empty={fireballFeed.loading ? 'Loading fireballs…' : fireballFeed.error ? 'Fireball data unavailable. Retry to load events.' : 'No fireballs match these filters.'}>{filteredFireballs.map((item) => <button key={item.id} onClick={() => { setSelectedFireball(item.id); setSelectedNeo(null); }} className="impact-list-item"><span>{new Date(item.dateTime).toLocaleString()}</span><small>{item.locationDescription ?? 'Location not reported'} · {number(item.impactEnergyKt, 3)} kt</small></button>)}</ObjectList></>}
           </aside>
         </section>
       </div>
