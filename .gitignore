@@ -9,6 +9,7 @@ env/
 # Build outputs
 frontend/dist/
 frontend/.vite/
+*.tsbuildinfo
 backend/.pytest_cache/
 .pytest_cache/
 backend/.cache/

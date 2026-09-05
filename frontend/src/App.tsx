@@ -38,11 +38,12 @@ type MobileInspectorState = 'peek' | 'expanded';
 
 function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [catalog, setCatalog] = useState<Satellite[]>([]);
-  const [activeCatalog, setActiveCatalog] = useState<Satellite[]>([]);
+  const activeCatalog = useRef<Satellite[]>([]);
   const [catalogMode, setCatalogMode] = useState<CatalogMode>('Active Satellites');
   const [publicObjects, setPublicObjects] = useState<CatalogObject[]>([]);
   const [publicTotal, setPublicTotal] = useState(0);
   const [publicLoading, setPublicLoading] = useState(false);
+  const [publicCatalogSearch, setPublicCatalogSearch] = useState('');
   const initialLayers = useMemo(readObjectLayers, []);
   const [showDebris, setShowDebris] = useState(initialLayers.debris);
   const [showRocketBodies, setShowRocketBodies] = useState(initialLayers.rocketBodies);
@@ -69,7 +70,20 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   const [observer, setObserver] = useState<Observer | null>(() => readObserver());
   const lastTick = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
-  const publicCatalogSearch = catalogMode === 'All Public Catalog' ? query.trim() : '';
+
+  useEffect(() => {
+    if (catalogMode !== 'All Public Catalog') {
+      setPublicCatalogSearch('');
+      return;
+    }
+    const normalized = query.trim();
+    if (!normalized) {
+      setPublicCatalogSearch('');
+      return;
+    }
+    const timer = window.setTimeout(() => setPublicCatalogSearch(normalized), 300);
+    return () => window.clearTimeout(timer);
+  }, [catalogMode, query]);
 
   useEffect(() => {
     const syncSelectionFromUrl = () => {
@@ -112,7 +126,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       })
       .then((payload) => {
         setCatalog(payload.satellites);
-        setActiveCatalog(payload.satellites);
+        activeCatalog.current = payload.satellites;
         setUpdatedAt(payload.updatedAt);
         setSource(payload.source);
         setUpstream(payload.upstream ?? null);
@@ -128,7 +142,8 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
 
   useEffect(() => {
     if (catalogMode === 'Active Satellites') {
-      setCatalog(activeCatalog);
+      setPublicLoading(false);
+      setCatalog(activeCatalog.current);
       return;
     }
     const controller = new AbortController();
@@ -144,12 +159,16 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         .then((payload) => {
           setPublicObjects(payload.objects);
           setPublicTotal(payload.total);
+          setCatalogError(false);
         })
         .catch((error: unknown) => {
           if (!(error instanceof DOMException && error.name === 'AbortError')) setCatalogError(true);
         })
-        .finally(() => setPublicLoading(false));
+        .finally(() => {
+          if (!controller.signal.aborted) setPublicLoading(false);
+        });
     } else {
+      setPublicLoading(false);
       const params = new URLSearchParams({ mode: 'on-orbit' });
       params.set('debris', 'true');
       params.set('rocket_bodies', 'true');
@@ -171,7 +190,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         });
     }
     return () => controller.abort();
-  }, [activeCatalog, catalogMode, publicCatalogSearch]);
+  }, [catalogMode, publicCatalogSearch]);
 
   useEffect(() => {
     lastTick.current = Date.now();
