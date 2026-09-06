@@ -12,6 +12,11 @@ export function useImpactFeed<T extends 'neos' | 'fireballs'>(feed: T, days: num
     setLoading(true);
     setPayload(null);
     setError(null);
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      setError('The data source took too long to respond. Please retry.');
+      setLoading(false);
+    }, 30_000);
     async function load() {
       try {
         const response = await fetch(apiUrl(`/impact/${feed}?days=${days}`), { signal: controller.signal });
@@ -24,11 +29,15 @@ export function useImpactFeed<T extends 'neos' | 'fireballs'>(feed: T, days: num
         if (controller.signal.aborted) return;
         setError('Data is temporarily unavailable.');
       } finally {
+        window.clearTimeout(timeout);
         if (!controller.signal.aborted) setLoading(false);
       }
     }
     void load();
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [feed, days, retry]);
 
   return { payload, loading, error };
