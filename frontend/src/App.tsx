@@ -641,21 +641,36 @@ function PublicCatalogList({
 }) {
   const [detail, setDetail] = useState<CatalogObject | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [failedNoradId, setFailedNoradId] = useState<number | null>(null);
+  const detailRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => () => detailRequest.current?.abort(), []);
 
   const loadDetail = (noradId: number) => {
+    detailRequest.current?.abort();
+    const controller = new AbortController();
+    detailRequest.current = controller;
+    setDetail(null);
+    setFailedNoradId(null);
     setDetailLoading(true);
-    fetch(apiUrl(`/catalog/objects/${noradId}`))
+    fetch(apiUrl(`/catalog/objects/${noradId}`), { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error('Object detail request failed');
         return response.json() as Promise<{ object: CatalogObject | null }>;
       })
       .then((payload) => {
+        if (controller.signal.aborted) return;
+        if (!payload.object) throw new Error('Object details unavailable');
         setDetail(payload.object);
         const object = payload.object as CatalogObject & Partial<Satellite> | null;
         if (object?.hasOrbitalData && object.meanMotion) onInspectOrbital(object as Satellite);
       })
-      .catch(() => setDetail(null))
-      .finally(() => setDetailLoading(false));
+      .catch(() => {
+        if (!controller.signal.aborted) setFailedNoradId(noradId);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDetailLoading(false);
+      });
   };
 
   return (
@@ -666,6 +681,12 @@ function PublicCatalogList({
         Search metadata by object name, NORAD number, international designator, or owner. Objects without current GP data are never placed on the globe.
       </p>
       <p className="mt-3 text-xs text-slate-500">{total.toLocaleString()} matching records · showing up to 200</p>
+      {failedNoradId !== null && (
+        <div role="alert" className="mt-4 rounded-xl border border-amber-700/60 p-4 text-sm text-amber-200">
+          Could not load details for NORAD {failedNoradId}.{' '}
+          <button onClick={() => loadDetail(failedNoradId)} className="underline">Retry object details</button>
+        </div>
+      )}
       {detail && (
         <article className="mt-4 rounded-xl border border-cyan-700/60 bg-cyan-950/20 p-4">
           <div className="flex items-start justify-between gap-3">
