@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
@@ -175,6 +175,45 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'All Public Catalog' }));
     expect(await screen.findByText('COSMOS 2251 DEB')).toBeInTheDocument();
     expect(screen.getByText('Orbital elements unavailable')).toBeInTheDocument();
+  });
+
+  it('ignores superseded public-object details and recovers from a failed selection', async () => {
+    const objects = [1, 2].map((noradId) => ({
+      id: `norad-${noradId}`, noradId, name: `Object ${noradId}`,
+      objectType: 'DEBRIS', operationalStatus: 'UNKNOWN', hasOrbitalData: false,
+      dataSources: { catalog: 'celestrak-satcat' },
+    }));
+    const jsonResponse = (body: unknown) => ({ ok: true, json: async () => body }) as Response;
+    let resolveOld!: (response: Response) => void;
+    let oldSignal: AbortSignal | null | undefined;
+    let failSecond = true;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/catalog/objects/1')) {
+        oldSignal = init?.signal;
+        return new Promise<Response>((resolve) => { resolveOld = resolve; });
+      }
+      if (url.endsWith('/catalog/objects/2')) {
+        return Promise.resolve(failSecond ? { ok: false } as Response : jsonResponse({ object: objects[1] }));
+      }
+      if (url.includes('/catalog/objects?')) return Promise.resolve(jsonResponse({ objects, total: 2 }));
+      return Promise.resolve(jsonResponse({ satellites: [], total: 0, source: 'celestrak', updatedAt: new Date().toISOString() }));
+    }));
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'All Public Catalog' }));
+    const buttons = await screen.findAllByRole('button', { name: 'Load details' });
+    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[1]);
+    expect(oldSignal?.aborted).toBe(true);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load details for NORAD 2');
+    failSecond = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry object details' }));
+    await screen.findByText('Object details');
+    expect(screen.getAllByRole('heading', { name: 'Object 2' })).toHaveLength(2);
+    await act(async () => { resolveOld(jsonResponse({ object: objects[0] })); });
+    expect(screen.getAllByRole('heading', { name: 'Object 1' })).toHaveLength(1);
+    expect(screen.getAllByRole('heading', { name: 'Object 2' })).toHaveLength(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('filters on-orbit objects without refetching the orbital catalog', async () => {
