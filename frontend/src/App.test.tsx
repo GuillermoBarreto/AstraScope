@@ -288,6 +288,52 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Rocket Bodies' })).toHaveAttribute('aria-pressed', 'false');
   });
 
+  it.each([
+    ['On-Orbit Objects', '/catalog/orbits'],
+    ['All Public Catalog', '/catalog/objects?'],
+  ])('retries the selected %s catalog after a failure', async (mode, endpoint) => {
+    let attempts = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes(endpoint)) {
+        attempts += 1;
+        if (attempts === 1) return Promise.reject(new Error('offline'));
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
+          objects: [], total: 0, updatedAt: new Date().toISOString(), source: 'cache',
+        }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        satellites: [], updatedAt: new Date().toISOString(), source: 'celestrak',
+      }) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: mode }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Catalog unavailable');
+    const activeRequests = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/satellites')).length;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry sync' }));
+    await waitFor(() => expect(attempts).toBe(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/satellites'))).toHaveLength(activeRequests);
+  });
+
+  it('ignores a late failure from a catalog mode that has been left', async () => {
+    let rejectOldRequest!: (error: Error) => void;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes('/catalog/orbits')) {
+        return new Promise((_resolve, reject) => { rejectOldRequest = reject; });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        satellites: [], updatedAt: new Date().toISOString(), source: 'celestrak',
+      }) });
+    }));
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'On-Orbit Objects' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Active Satellites' }));
+    await act(async () => { rejectOldRequest(new Error('late network failure')); });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText('CATALOG SYNCING…')).not.toBeInTheDocument();
+  });
+
   it('recovers from a failed catalog sync without requiring a page reload', async () => {
     const satellite = {
       id: 'hubble-20580', name: 'HUBBLE SPACE TELESCOPE', noradId: 20580, objectId: '1990-037B', epoch: new Date().toISOString(),
