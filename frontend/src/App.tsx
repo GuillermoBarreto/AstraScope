@@ -112,6 +112,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
   }, [catalog, selectedId]);
 
   useEffect(() => {
+    if (catalogMode !== 'Active Satellites') return;
     const controller = new AbortController();
     setStatus('loading');
     setCatalogError(false);
@@ -125,20 +126,22 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         return satellitesResponse.json() as Promise<SatelliteResponse>;
       })
       .then((payload) => {
+        if (controller.signal.aborted) return;
         setCatalog(payload.satellites);
         activeCatalog.current = payload.satellites;
         setUpdatedAt(payload.updatedAt);
         setSource(payload.source);
         setUpstream(payload.upstream ?? null);
         setStatus(payload.source === 'unavailable' ? 'offline' : 'live');
+        setCatalogError(payload.source === 'unavailable');
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return;
+        if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
         setStatus('offline');
         setCatalogError(true);
       });
     return () => controller.abort();
-  }, [catalogRequest]);
+  }, [catalogRequest, catalogMode]);
 
   useEffect(() => {
     if (catalogMode === 'Active Satellites') {
@@ -147,6 +150,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
       return;
     }
     const controller = new AbortController();
+    setCatalogError(false);
     if (catalogMode === 'All Public Catalog') {
       setPublicLoading(true);
       const params = new URLSearchParams({ mode: 'all', page_size: '200' });
@@ -157,12 +161,13 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           return response.json() as Promise<{ objects: CatalogObject[]; total: number }>;
         })
         .then((payload) => {
+          if (controller.signal.aborted) return;
           setPublicObjects(payload.objects);
           setPublicTotal(payload.total);
           setCatalogError(false);
         })
         .catch((error: unknown) => {
-          if (!(error instanceof DOMException && error.name === 'AbortError')) setCatalogError(true);
+          if (!controller.signal.aborted && !(error instanceof DOMException && error.name === 'AbortError')) setCatalogError(true);
         })
         .finally(() => {
           if (!controller.signal.aborted) setPublicLoading(false);
@@ -179,18 +184,22 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           return response.json() as Promise<{ objects: Satellite[]; updatedAt: string; source: SatelliteResponse['source']; upstream?: SatelliteResponse['upstream'] }>;
         })
         .then((payload) => {
+          if (controller.signal.aborted) return;
           setCatalog(payload.objects);
           setUpdatedAt(payload.updatedAt);
           setSource(payload.source);
           setUpstream(payload.upstream ?? null);
-          setStatus('live');
+          setStatus(payload.source === 'unavailable' ? 'offline' : 'live');
+          setCatalogError(payload.source === 'unavailable');
         })
         .catch((error: unknown) => {
-          if (!(error instanceof DOMException && error.name === 'AbortError')) setStatus('offline');
+          if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
+          setStatus('offline');
+          setCatalogError(true);
         });
     }
     return () => controller.abort();
-  }, [catalogMode, publicCatalogSearch]);
+  }, [catalogMode, publicCatalogSearch, catalogRequest]);
 
   useEffect(() => {
     lastTick.current = Date.now();
