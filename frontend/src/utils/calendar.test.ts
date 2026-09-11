@@ -16,6 +16,21 @@ const pass: SatellitePass = {
 };
 
 describe('satellite pass calendar', () => {
+  it('escapes every newline format without injecting calendar fields', () => {
+    const calendar = satellitePassCalendar(
+      { ...satellite, name: 'ISS\r\nATTENDEE:unexpected\rEND:VEVENT\nExtra' },
+      pass,
+      { ...observer, label: 'Home\rBEGIN:VEVENT' },
+      'https://astrascope.app/',
+    );
+
+    expect(calendar).toContain('SUMMARY:ISS\\nATTENDEE:unexpected\\nEND:VEVENT\\nExtra visible pass');
+    expect(calendar).toContain('LOCATION:Home\\nBEGIN:VEVENT');
+    expect(calendar.split('\r\n').filter((line) => line === 'BEGIN:VEVENT')).toHaveLength(1);
+    expect(calendar.split('\r\n').filter((line) => line === 'END:VEVENT')).toHaveLength(1);
+    expect(calendar.replace(/\r\n/g, '')).not.toMatch(/[\r\n]/);
+  });
+
   it('creates a portable UTC event with a reminder and escaped location', () => {
     const calendar = satellitePassCalendar(satellite, pass, observer, 'https://astrascope.app/?satellite=iss-25544');
 
