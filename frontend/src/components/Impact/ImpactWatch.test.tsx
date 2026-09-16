@@ -14,19 +14,46 @@ function response(feed: string, name = 'Test asteroid') {
 describe('Impact Watch feed loading', () => {
   it('keeps available approaches visible when fireballs fail and recovers on retry', async () => {
     let fail = true;
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    let resolveRetry!: (response: Response) => void;
+    const fetchMock = vi.fn(async (url: string) => {
       if (url.includes('/neos')) return response('neos');
       if (fail) throw new Error('Offline');
-      return response('fireballs');
-    }));
+      return new Promise<Response>((resolve) => { resolveRetry = resolve; });
+    });
+    vi.stubGlobal('fetch', fetchMock);
     render(<ImpactWatch onMode={() => {}} />);
     expect(await screen.findByText('Test asteroid')).toBeInTheDocument();
     expect(await screen.findByText('PARTIAL DATA')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Fireballs:');
     fail = false;
     fireEvent.click(screen.getByRole('button', { name: 'Retry data' }));
+    expect(screen.getByText('Test asteroid')).toBeInTheDocument();
+    expect(screen.getByText('Loading fireballs…')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes('/neos'))).toHaveLength(1);
+    await act(async () => { resolveRetry(response('fireballs')); });
     expect(await screen.findByText('NASA / JPL LIVE')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('retries failed approaches while the original fireball request is still loading', async () => {
+    let resolveFireballs!: (response: Response) => void;
+    let fail = true;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('/fireballs')) return new Promise<Response>((resolve) => { resolveFireballs = resolve; });
+      if (fail) throw new Error('Offline');
+      return response('neos');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<ImpactWatch onMode={() => {}} />);
+    const retry = await screen.findByRole('button', { name: 'Retry data' });
+    expect(retry).toBeEnabled();
+    expect(screen.getByText('Loading fireballs…')).toBeInTheDocument();
+    fail = false;
+    fireEvent.click(retry);
+    expect(await screen.findByText('Test asteroid')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes('/fireballs'))).toHaveLength(1);
+    await act(async () => { resolveFireballs(response('fireballs')); });
+    expect(await screen.findByText('NASA / JPL LIVE')).toBeInTheDocument();
   });
 
   it('only reloads the changed window and ignores late responses from an old window', async () => {

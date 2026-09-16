@@ -8,7 +8,8 @@ import { useImpactFeed } from './useImpactFeed';
 const number = (value: number | null, digits = 1) => value === null ? 'Not reported' : value.toLocaleString(undefined, { maximumFractionDigits: digits });
 
 export function ImpactWatch({ onMode }: { onMode: () => void }) {
-  const [retry, setRetry] = useState(0);
+  const [neoRetry, setNeoRetry] = useState(0);
+  const [fireballRetry, setFireballRetry] = useState(0);
   const [hazardousOnly, setHazardousOnly] = useState(false);
   const [minDiameter, setMinDiameter] = useState(0);
   const [neoDays, setNeoDays] = useState(7);
@@ -17,8 +18,12 @@ export function ImpactWatch({ onMode }: { onMode: () => void }) {
   const [coordinateFilter, setCoordinateFilter] = useState('all');
   const [selectedNeo, setSelectedNeo] = useState<string | null>(null);
   const [selectedFireball, setSelectedFireball] = useState<string | null>(null);
-  const neoFeed = useImpactFeed('neos', neoDays, retry);
-  const fireballFeed = useImpactFeed('fireballs', fireballDays, retry);
+  const neoFeed = useImpactFeed('neos', neoDays, neoRetry);
+  const fireballFeed = useImpactFeed('fireballs', fireballDays, fireballRetry);
+  const retryFailedFeeds = () => {
+    if (neoFeed.error && !neoFeed.loading) setNeoRetry((value) => value + 1);
+    if (fireballFeed.error && !fireballFeed.loading) setFireballRetry((value) => value + 1);
+  };
   const neos = useMemo(() => neoFeed.payload?.neos ?? [], [neoFeed.payload]);
   const fireballs = useMemo(() => fireballFeed.payload?.fireballs ?? [], [fireballFeed.payload]);
   const errors = [neoFeed.error && ('Near-Earth approaches: ' + neoFeed.error), fireballFeed.error && ('Fireballs: ' + fireballFeed.error)].filter(Boolean);
@@ -46,7 +51,7 @@ export function ImpactWatch({ onMode }: { onMode: () => void }) {
           </div>
           <div className="impact-telemetry" aria-live="polite">{status === 'loading' ? 'DATA SOURCES SYNCING…' : <><strong>{neos.length}</strong> APPROACHES · <strong>{hazardousCount}</strong> HAZARDOUS CLASSIFICATIONS · <strong>{fireballs.length}</strong> FIREBALLS {updatedAt && ` · UPDATED ${freshnessLabel(updatedAt)}`}</>}</div>
         </section>
-        {errors.length > 0 && <div role="alert" className="impact-alert">Some NASA/JPL data could not be loaded. {errors.join(' ')} <button type="button" onClick={() => setRetry((value) => value + 1)} disabled={status === 'loading'}>Retry data</button></div>}
+        {errors.length > 0 && <div role="alert" className="impact-alert">Some NASA/JPL data could not be loaded. {errors.join(' ')} <button type="button" onClick={retryFailedFeeds}>Retry data</button></div>}
         <section className="workspace-grid impact-grid">
           <div className="visualization-pane">
             <ImpactScene events={filteredFireballs} selectedId={selectedFireball} onSelect={(id) => { setSelectedFireball(id); setSelectedNeo(null); }} />
