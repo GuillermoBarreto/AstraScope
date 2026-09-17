@@ -116,6 +116,12 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
     const controller = new AbortController();
     setStatus('loading');
     setCatalogError(false);
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      setStatus('offline');
+      setPublicLoading(false);
+      setCatalogError(true);
+    }, 30_000);
 
     // Health telemetry is useful to the server, but it should never prevent a
     // valid catalog response from reaching the workspace.
@@ -139,8 +145,12 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
         if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
         setStatus('offline');
         setCatalogError(true);
-      });
-    return () => controller.abort();
+      })
+      .finally(() => window.clearTimeout(timeout));
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [catalogRequest, catalogMode]);
 
   useEffect(() => {
@@ -151,6 +161,12 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
     }
     const controller = new AbortController();
     setCatalogError(false);
+    const timeout = window.setTimeout(() => {
+      controller.abort();
+      setStatus('offline');
+      setPublicLoading(false);
+      setCatalogError(true);
+    }, 30_000);
     if (catalogMode === 'All Public Catalog') {
       setPublicLoading(true);
       const params = new URLSearchParams({ mode: 'all', page_size: '200' });
@@ -170,6 +186,7 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           if (!controller.signal.aborted && !(error instanceof DOMException && error.name === 'AbortError')) setCatalogError(true);
         })
         .finally(() => {
+          window.clearTimeout(timeout);
           if (!controller.signal.aborted) setPublicLoading(false);
         });
     } else {
@@ -196,9 +213,13 @@ function SatelliteWatch({ onMode }: { onMode: () => void }) {
           if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
           setStatus('offline');
           setCatalogError(true);
-        });
+        })
+        .finally(() => window.clearTimeout(timeout));
     }
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, [catalogMode, publicCatalogSearch, catalogRequest]);
 
   useEffect(() => {

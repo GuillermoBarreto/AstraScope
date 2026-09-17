@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
@@ -14,6 +14,47 @@ describe('App', () => {
     window.history.replaceState({}, '', '/');
     localStorage.clear();
   });
+
+  it.each(['Active Satellites', 'On-Orbit Objects', 'All Public Catalog'])(
+    'recovers from a stalled %s request and ignores its late response',
+    async (mode) => {
+      vi.useFakeTimers();
+      let resolveBody!: (value: unknown) => void;
+      let requestSignal: AbortSignal | null | undefined;
+      const endpoint = mode === 'Active Satellites' ? '/satellites'
+        : mode === 'On-Orbit Objects' ? '/catalog/orbits' : '/catalog/objects?';
+      const payload = { satellites: [], objects: [], total: 0, source: 'celestrak', updatedAt: new Date().toISOString() };
+      let attempts = 0;
+      vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).includes(endpoint) && attempts++ === 0) {
+          requestSignal = init?.signal;
+          return Promise.resolve({ ok: true, json: () => new Promise((resolve) => { resolveBody = resolve; }) });
+        }
+        return Promise.resolve({ ok: true, json: async () => payload });
+      }));
+      try {
+        render(<App />);
+        fireEvent.click(screen.getByRole('button', { name: mode }));
+        await act(async () => {});
+        await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+        expect(requestSignal?.aborted).toBe(true);
+        expect(screen.getByRole('button', { name: 'Retry sync' })).toBeInTheDocument();
+        expect(screen.queryByText('CATALOG SYNCING…')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Retry sync' }));
+        await act(async () => {});
+        expect(screen.queryByRole('button', { name: 'Retry sync' })).not.toBeInTheDocument();
+        await act(async () => { resolveBody({ ...payload, source: 'unavailable' }); });
+        expect(screen.queryByRole('button', { name: 'Retry sync' })).not.toBeInTheDocument();
+        await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+        expect(screen.queryByRole('button', { name: 'Retry sync' })).not.toBeInTheDocument();
+      } finally {
+        cleanup();
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+      }
+    },
+  );
 
   it('renders enriched satellite details, fallback media, favorites, and sharing', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
