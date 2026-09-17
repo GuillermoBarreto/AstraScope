@@ -8,6 +8,7 @@ export async function copyText(value: string): Promise<boolean> {
     // Fall through to the compatibility path when permission is denied.
   }
 
+  const previousFocus = document.activeElement;
   const textarea = document.createElement('textarea');
   textarea.value = value;
   textarea.setAttribute('readonly', '');
@@ -22,5 +23,6 @@ export async function copyText(value: string): Promise<boolean> {
     return false;
   } finally {
     textarea.remove();
+    if (previousFocus instanceof HTMLElement) previousFocus.focus({ preventScroll: true });
   }
 }

@@ -33,4 +33,21 @@ describe('copyText', () => {
     await expect(copyText('blocked')).resolves.toBe(false);
     expect(document.querySelector('textarea')).toBeNull();
   });
+
+  it('restores keyboard focus after the fallback copy', async () => {
+    vi.stubGlobal('navigator', {});
+    const button = document.createElement('button');
+    document.body.appendChild(button);
+    button.focus();
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: () => { document.querySelector('textarea')?.focus(); return true; },
+    });
+    try {
+      await expect(copyText('fallback')).resolves.toBe(true);
+      expect(document.activeElement).toBe(button);
+    } finally {
+      button.remove();
+    }
+  });
 });
