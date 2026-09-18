@@ -53,3 +53,18 @@ def test_upstream_failure_returns_structured_error(monkeypatch) -> None:
 def test_impact_parameter_validation() -> None:
     assert TestClient(app).get("/impact/neos?days=8").status_code == 422
     assert TestClient(app).get("/impact/fireballs?days=0").status_code == 422
+
+
+def test_fireball_normalization_rejects_incomplete_rows() -> None:
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    # missing energy -> rejected
+    assert normalize_fireball(fields, ["2026-08-01 01:02:03", "10", "N", "20", "E", "30", "", "0.1", "3", "4", "0"]) is None
+    # missing impact energy -> rejected
+    assert normalize_fireball(fields, ["2026-08-01 01:02:03", "10", "N", "20", "E", "30", "2.5", "", "3", "4", "0"]) is None
+    # missing timestamp -> rejected
+    assert normalize_fireball(fields, ["", "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"]) is None
+
+
+def test_neo_normalization_rejects_missing_approach() -> None:
+    assert normalize_neo({"id": "1", "name": "NoApproach"}) is None
+    assert normalize_neo({**neo_payload(), "close_approach_data": []}) is None
