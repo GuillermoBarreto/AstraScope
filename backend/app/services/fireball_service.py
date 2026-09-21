@@ -62,5 +62,10 @@ def fetch_fireballs(days: int, cache_window: int) -> list[Fireball]:
     fields, rows = payload.get("fields"), payload.get("data")
     if not isinstance(fields, list) or not isinstance(rows, list):
         raise ValueError("JPL Fireball API returned malformed data")
-    events = [event for row in rows if isinstance(row, list) and (event := normalize_fireball(fields, row)) is not None]
+    events = [
+        event
+        for row in rows
+        if isinstance(row, list) and len(row) == len(fields)
+        and (event := normalize_fireball(fields, row)) is not None
+    ]
     return events
