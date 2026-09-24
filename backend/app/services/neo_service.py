@@ -24,9 +24,11 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     if not isinstance(approaches, list) or not approaches or not isinstance(approaches[0], dict):
         return None
     approach = approaches[0]
-    diameter = entry.get("estimated_diameter", {}).get("kilometers", {})
-    velocity = approach.get("relative_velocity", {})
-    distance = approach.get("miss_distance", {})
+    # NASA sometimes returns null for nested objects; treat them as empty dicts
+    # instead of crashing with AttributeError.
+    diameter = (entry.get("estimated_diameter") or {}).get("kilometers") or {}
+    velocity = approach.get("relative_velocity") or {}
+    distance = approach.get("miss_distance") or {}
     approach_date = str(approach.get("close_approach_date") or "")
     if not approach_date:
         return None
