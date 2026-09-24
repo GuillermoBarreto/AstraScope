@@ -524,14 +524,14 @@ def list_satellites(
                 error = "Orbital catalog providers and fallback are temporarily unavailable"
 
     if operator and operator.lower() != "all":
-        satellites = [item for item in satellites if item["operator"].lower() == operator.lower()]
+        satellites = [item for item in satellites if (item.get("operator") or "").lower() == operator.lower()]
     if orbit and orbit.lower() != "all":
-        satellites = [item for item in satellites if item["orbit"].lower() == orbit.lower()]
+        satellites = [item for item in satellites if (item.get("orbit") or "").lower() == orbit.lower()]
     if search:
         query = search.lower()
         satellites = [
             item for item in satellites
-            if query in item["name"].lower() or query in str(item["noradId"])
+            if query in (item.get("name") or "").lower() or query in str(item.get("noradId"))
         ]
 
     return {
