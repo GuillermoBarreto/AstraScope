@@ -51,6 +51,9 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
 @lru_cache(maxsize=32)
 def fetch_neos(days: int, api_key: str, cache_window: int) -> list[NearEarthObject]:
     del cache_window
+    # A day count below 1 would push the end date before the start date and
+    # ask NASA for an inverted range, so clamp it.
+    days = max(1, days)
     start = date.today()
     params = urlencode({"start_date": start.isoformat(), "end_date": (start + timedelta(days=days - 1)).isoformat(), "api_key": api_key})
     request = Request(f"{NEOWS_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
