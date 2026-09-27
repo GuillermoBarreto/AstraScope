@@ -14,6 +14,9 @@ export async function copyText(value: string): Promise<boolean> {
   textarea.style.position = 'fixed';
   textarea.style.opacity = '0';
   document.body.appendChild(textarea);
+  // Focusing first makes programmatic selection (and therefore copy) work
+  // reliably on mobile browsers, which otherwise ignore select().
+  textarea.focus();
   textarea.select();
 
   try {
