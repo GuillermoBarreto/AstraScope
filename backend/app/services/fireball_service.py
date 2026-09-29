@@ -52,6 +52,9 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
 @lru_cache(maxsize=32)
 def fetch_fireballs(days: int, cache_window: int) -> list[Fireball]:
     del cache_window
+    # A day count below 1 would push the start date into the future and
+    # ask JPL for an inverted range, so clamp it (mirrors fetch_neos).
+    days = max(1, days)
     start = date.today() - timedelta(days=days)
     params = urlencode({"date-min": start.isoformat(), "vel-comp": "true", "sort": "-date"})
     request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
