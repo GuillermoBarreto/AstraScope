@@ -7,17 +7,11 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from ..core.http import tls_context
+from ..core.parsing import optional_float
 from ..models.impact import Fireball
 
 FIREBALL_URL = "https://ssd-api.jpl.nasa.gov/fireball.api"
 TIMEOUT_SECONDS = 20
-
-
-def optional_float(value: Any) -> float | None:
-    try:
-        return float(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
 
 
 def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
