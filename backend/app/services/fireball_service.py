@@ -54,7 +54,7 @@ def fetch_fireballs(days: int, cache_window: int) -> list[Fireball]:
     request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
-    if int(payload.get("count", 0)) == 0:
+    if not isinstance(payload, dict) or int(payload.get("count", 0)) == 0:
         return []
     fields, rows = payload.get("fields"), payload.get("data")
     if not isinstance(fields, list) or not isinstance(rows, list):
