@@ -26,9 +26,11 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports reposi
 
 try:
     from app.core.config import settings
+    from app.core.parsing import optional_float
     from app.data.satellite_metadata import enrich_satellite
 except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
+    from backend.app.core.parsing import optional_float
     from backend.app.data.satellite_metadata import enrich_satellite
 
 app = FastAPI(title="AstraScope API", version="0.2.0")
@@ -189,11 +191,6 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
     })
 
 
-def optional_float(value: Any) -> float | None:
-    try:
-        return float(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
 
 
 def normalize_satcat(entry: dict[str, Any]) -> dict[str, Any]:
