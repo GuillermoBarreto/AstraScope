@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import ssl
 import time
@@ -32,6 +33,8 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct
     from backend.app.core.config import settings
     from backend.app.core.parsing import optional_float
     from backend.app.data.satellite_metadata import enrich_satellite
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AstraScope API", version="0.2.0")
 app.include_router(impact_router)
@@ -384,6 +387,7 @@ def public_catalog() -> tuple[list[dict[str, Any]], str, str, str | None]:
         objects, updated_at = fetch_public_catalog(window)
         return objects, updated_at, "celestrak-satcat", None
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+        logger.warning("SATCAT sync failed (%s): %s", type(exc).__name__, exc)
         if cached:
             return cached[0], cached[1], "stale-cache", f"{type(exc).__name__}: catalog sync failed"
         return [], datetime.now(timezone.utc).isoformat(), "unavailable", f"{type(exc).__name__}: catalog unavailable"
@@ -467,11 +471,13 @@ def fetch_primary_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str,
             satellites, updated_at = fetch_spacetrack_catalog(cache_window)
             return satellites, updated_at, "spacetrack"
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+            logger.warning("Space-Track catalog sync failed (%s): %s", type(exc).__name__, exc)
             errors.append("Space-Track unavailable")
     try:
         satellites, updated_at = fetch_catalog(cache_window)
         return satellites, updated_at, "celestrak"
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+        logger.warning("CelesTrak catalog sync failed (%s): %s", type(exc).__name__, exc)
         errors.append("CelesTrak unavailable")
     raise ValueError("; ".join(errors))
 
@@ -512,6 +518,7 @@ def list_satellites(
             satellites, updated_at, upstream = fetch_primary_catalog(cache_window)
             source = upstream
     except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+        logger.warning("Primary orbital catalog unavailable (%s): %s", type(exc).__name__, exc)
         detail = ""
         if isinstance(exc, HTTPError):
             try:
