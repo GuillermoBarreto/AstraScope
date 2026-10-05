@@ -230,10 +230,26 @@ def normalize_satcat(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _tle_int(text: str) -> int:
+    """Parse a TLE numeric field, raising a clear error on malformed data."""
+    try:
+        return int(text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid SatNOGS TLE record") from exc
+
+
+def _tle_float(text: str) -> float:
+    """Parse a TLE numeric field, raising a clear error on malformed data."""
+    try:
+        return float(text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid SatNOGS TLE record") from exc
+
+
 def tle_epoch(value: str) -> str:
-    year = int(value[:2])
+    year = _tle_int(value[:2])
     full_year = 2000 + year if year < 57 else 1900 + year
-    day = float(value[2:])
+    day = _tle_float(value[2:])
     start = datetime(full_year, 1, 1, tzinfo=timezone.utc)
     return datetime.fromtimestamp(start.timestamp() + (day - 1) * 86400, timezone.utc).isoformat()
 
@@ -242,7 +258,7 @@ def tle_object_id(value: str) -> str:
     compact = value.strip()
     if len(compact) < 5:
         return compact or "unknown"
-    year = int(compact[:2])
+    year = _tle_int(compact[:2])
     full_year = 2000 + year if year < 57 else 1900 + year
     return f"{full_year}-{compact[2:5]}{compact[5:]}"
 
@@ -253,8 +269,8 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
     if len(line1) < 32 or len(line2) < 63:
         raise ValueError("Invalid SatNOGS TLE record")
     name = str(entry.get("tle0", "Unknown satellite")).removeprefix("0 ").strip()
-    norad_id = int(entry.get("norad_cat_id") or line1[2:7])
-    mean_motion = float(line2[52:63])
+    norad_id = _tle_int(str(entry.get("norad_cat_id") or line1[2:7]))
+    mean_motion = _tle_float(line2[52:63])
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "satellite"
     return enrich_satellite({
         "id": f"{slug}-{norad_id}",
@@ -262,16 +278,16 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
         "noradId": norad_id,
         "objectId": tle_object_id(line1[9:17]),
         "epoch": tle_epoch(line1[18:32]),
-        "inclination": float(line2[8:16]),
-        "raan": float(line2[17:25]),
-        "eccentricity": float(f"0.{line2[26:33].strip()}"),
-        "argPericenter": float(line2[34:42]),
-        "meanAnomaly": float(line2[43:51]),
+        "inclination": _tle_float(line2[8:16]),
+        "raan": _tle_float(line2[17:25]),
+        "eccentricity": _tle_float(f"0.{line2[26:33].strip()}"),
+        "argPericenter": _tle_float(line2[34:42]),
+        "meanAnomaly": _tle_float(line2[43:51]),
         "meanMotion": mean_motion,
         "bstar": 0,
         "meanMotionDot": 0,
         "meanMotionDdot": 0,
-        "elementSetNo": int(line1[64:68].strip() or 0),
+        "elementSetNo": _tle_int(line1[64:68].strip() or "0"),
         "tle1": line1,
         "tle2": line2,
         "operator": identify_operator(name),
