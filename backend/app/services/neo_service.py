@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import date, timedelta
 from functools import lru_cache
@@ -42,12 +43,36 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     )
 
 
-@lru_cache(maxsize=32)
+def _key_fingerprint(api_key: str) -> str:
+    """SHA-256 fingerprint identifying an API key without exposing it.
+
+    The raw key must never be part of the ``lru_cache`` key below: cache
+    argument tuples are retained for the whole process lifetime.
+    """
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
 def fetch_neos(days: int, api_key: str, cache_window: int) -> list[NearEarthObject]:
-    del cache_window
+    """Fetch near-earth objects, caching per (days, key fingerprint, window).
+
+    The cache key carries a SHA-256 fingerprint of the API key instead of the
+    key itself, so the secret is never retained in the cache's argument tuples.
+    """
     # A day count below 1 would push the end date before the start date and
     # ask NASA for an inverted range, so clamp it.
-    days = max(1, days)
+    return _fetch_neos_cached(max(1, days), _key_fingerprint(api_key), cache_window)
+
+
+@lru_cache(maxsize=32)
+def _fetch_neos_cached(days: int, key_fingerprint: str, cache_window: int) -> list[NearEarthObject]:
+    del cache_window
+    from ..core.config import settings  # local import: config never imports services
+    api_key = settings.nasa_api_key
+    if _key_fingerprint(api_key) != key_fingerprint:
+        # The configured key rotated after this entry was cached: drop the
+        # stale entries instead of serving them under a different key.
+        _fetch_neos_cached.cache_clear()
+        raise ValueError("NASA API key changed; NeoWs cache cleared, retry the request")
     start = date.today()
     params = urlencode({"start_date": start.isoformat(), "end_date": (start + timedelta(days=days - 1)).isoformat(), "api_key": api_key})
     request = Request(f"{NEOWS_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
