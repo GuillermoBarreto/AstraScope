@@ -23,10 +23,13 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
         return None
     latitude = optional_float(record.get("lat"))
     longitude = optional_float(record.get("lon"))
+    # Use -abs(): the API sometimes already returns a signed value alongside
+    # the direction flag, and multiplying an already-negative value by -1
+    # would flip it into the wrong hemisphere.
     if latitude is not None and record.get("lat-dir") == "S":
-        latitude *= -1
+        latitude = -abs(latitude)
     if longitude is not None and record.get("lon-dir") == "W":
-        longitude *= -1
+        longitude = -abs(longitude)
     components = [optional_float(record.get(key)) for key in ("vx", "vy", "vz")]
     velocity = math.sqrt(sum(value * value for value in components)) if all(value is not None for value in components) else None
     location = f"{abs(latitude):.1f}° {'N' if latitude >= 0 else 'S'}, {abs(longitude):.1f}° {'E' if longitude >= 0 else 'W'}" if latitude is not None and longitude is not None else None
