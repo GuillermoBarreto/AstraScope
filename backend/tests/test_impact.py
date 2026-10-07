@@ -42,6 +42,18 @@ def test_fireball_normalization() -> None:
     assert item.velocityKmS == 5
 
 
+def test_fireball_normalization_signed_coordinates() -> None:
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    # JPL sometimes returns already-signed values alongside the direction
+    # flag; the flag must win instead of flipping into the wrong hemisphere.
+    item = normalize_fireball(fields, ["2026-08-01 01:02:03", "-10", "S", "-20", "W", "30", "2.5", "0.1", "3", "4", "0"])
+    assert item is not None
+    assert item.latitude == -10
+    assert item.longitude == -20
+    assert "S" in (item.locationDescription or "")
+    assert "W" in (item.locationDescription or "")
+
+
 def test_upstream_failure_returns_structured_error(monkeypatch) -> None:
     monkeypatch.setattr(impact_api, "fetch_neos", lambda *_args: (_ for _ in ()).throw(TimeoutError("timed out")))
     payload = TestClient(app).get("/api/impact/neos").json()
