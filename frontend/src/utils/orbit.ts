@@ -110,7 +110,12 @@ export function orbitalMetrics(satellite: Satellite, date = new Date()) {
 }
 
 export function groundTrack(satellite: Satellite, center: Date, samples = 120) {
-  const periodMinutes = 1440 / satellite.meanMotion;
+  // Records with missing or invalid mean motion (decayed objects, catalog-only
+  // entries, bad provider data) have no usable orbital period. Reuse the
+  // orbitalPeriodMinutes() guard and bail out instead of sampling
+  // new Date(Infinity)/new Date(NaN), which would feed Invalid Dates to SGP4.
+  const periodMinutes = orbitalPeriodMinutes(satellite.meanMotion);
+  if (periodMinutes == null) return [];
   return Array.from({ length: samples + 1 }, (_, index) => {
     const offset = (index / samples - 0.5) * periodMinutes * 60_000;
     return satellitePosition(satellite, new Date(center.getTime() + offset));
