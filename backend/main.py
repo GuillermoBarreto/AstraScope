@@ -162,7 +162,10 @@ def identify_purpose(name: str) -> str:
 def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict[str, Any]:
     name = str(entry.get("OBJECT_NAME", "Unknown satellite"))
     norad_id = int(entry.get("NORAD_CAT_ID") or 0)
-    mean_motion = float(entry.get("MEAN_MOTION") or 1)
+    # A missing/zero mean motion must not fall through to 1.0: orbit_class()
+    # maps 1.0 to GEO, which would mislabel records with no orbital data.
+    # 0 maps to "OTHER".
+    mean_motion = float(entry.get("MEAN_MOTION") or 0)
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "satellite"
     return enrich_satellite({
         "id": f"{slug}-{norad_id}",
@@ -401,7 +404,16 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
         payload = json.load(response)
     if not isinstance(payload, list):
         return [], datetime.now(timezone.utc).isoformat()
-    satellites = [normalize(item, "celestrak-gp") for item in payload if isinstance(item, dict)]
+    # Skip malformed records individually: one bad record (e.g. a non-numeric
+    # MEAN_MOTION) must not abort the whole sync and leave stale cache for all.
+    satellites = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        try:
+            satellites.append(normalize(item, "celestrak-gp"))
+        except (ValueError, TypeError):
+            continue
     updated_at = datetime.now(timezone.utc).isoformat()
     write_disk_cache(satellites, updated_at, "celestrak")
     return satellites, updated_at
