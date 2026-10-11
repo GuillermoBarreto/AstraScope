@@ -404,7 +404,16 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
         payload = json.load(response)
     if not isinstance(payload, list):
         return [], datetime.now(timezone.utc).isoformat()
-    satellites = [normalize(item, "celestrak-gp") for item in payload if isinstance(item, dict)]
+    # Skip malformed records individually: one bad record (e.g. a non-numeric
+    # MEAN_MOTION) must not abort the whole sync and leave stale cache for all.
+    satellites = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        try:
+            satellites.append(normalize(item, "celestrak-gp"))
+        except (ValueError, TypeError):
+            continue
     updated_at = datetime.now(timezone.utc).isoformat()
     write_disk_cache(satellites, updated_at, "celestrak")
     return satellites, updated_at
