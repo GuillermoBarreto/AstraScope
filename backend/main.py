@@ -470,7 +470,17 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
     if not isinstance(payload, list) or not payload:
         raise ValueError("Space-Track returned no orbital records; verify the configured credentials")
 
-    satellites = [normalize(item, "space-track") for item in payload if isinstance(item, dict)]
+    # Skip malformed records individually: one bad Space-Track record (e.g. a
+    # non-numeric MEAN_MOTION) must not abort the whole sync and leave stale
+    # cache for all (mirrors fetch_catalog and fetch_satnogs_catalog).
+    satellites = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        try:
+            satellites.append(normalize(item, "space-track"))
+        except (ValueError, TypeError):
+            continue
     updated_at = datetime.now(timezone.utc).isoformat()
     write_disk_cache(satellites, updated_at, "spacetrack")
     return satellites, updated_at
