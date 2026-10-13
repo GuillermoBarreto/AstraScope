@@ -1,7 +1,6 @@
 import json
 import logging
 import re
-import ssl
 import time
 import csv
 import io
@@ -14,8 +13,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPCookieProcessor, HTTPSHandler, Request, build_opener, urlopen
 
-import certifi
-import truststore
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -27,10 +24,12 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports reposi
 
 try:
     from app.core.config import settings
+    from app.core.http import tls_context
     from app.core.parsing import optional_float
     from app.data.satellite_metadata import enrich_satellite
 except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
+    from backend.app.core.http import tls_context
     from backend.app.core.parsing import optional_float
     from backend.app.data.satellite_metadata import enrich_satellite
 
@@ -65,13 +64,6 @@ CELESTRAK_TIMEOUT_SECONDS = 120
 CACHE_SCHEMA_VERSION = 4
 last_failure_at = 0.0
 last_failure_error: str | None = None
-
-
-def tls_context() -> ssl.SSLContext:
-    try:
-        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    except (ImportError, NotImplementedError):
-        return ssl.create_default_context(cafile=certifi.where())
 
 
 @app.get("/health")
