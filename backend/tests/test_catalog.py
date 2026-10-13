@@ -1,3 +1,5 @@
+import csv
+import io
 import json
 import time
 
@@ -213,3 +215,40 @@ def test_provider_failure_retry_is_shorter_than_catalog_cache() -> None:
 
 def test_bulk_celestrak_download_allows_slow_cold_start() -> None:
     assert main.CELESTRAK_TIMEOUT_SECONDS >= 120
+
+
+def test_public_catalog_skips_malformed_rows_individually(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(main, "PUBLIC_CATALOG_CACHE_FILE", tmp_path / "public-catalog.json")
+    main.fetch_public_catalog.cache_clear()
+
+    fieldnames = list(satcat_record().keys())
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerow(satcat_record())
+    writer.writerow(satcat_record(OBJECT_NAME="BAD ROW", NORAD_CAT_ID="not-a-number"))
+    writer.writerow(satcat_record(OBJECT_NAME="OBJECT 2", NORAD_CAT_ID="2"))
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self._body = body
+
+        def read(self) -> bytes:
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    def fake_urlopen(request, timeout=None, context=None):
+        assert request.full_url == main.CELESTRAK_SATCAT_URL
+        # Include a BOM: real SATCAT downloads decode with utf-8-sig.
+        return FakeResponse(("\ufeff" + buffer.getvalue()).encode("utf-8"))
+
+    monkeypatch.setattr(main, "urlopen", fake_urlopen)
+    objects, updated_at = main.fetch_public_catalog(1)
+
+    assert [item["noradId"] for item in objects] == [25544, 2]
+    assert updated_at

@@ -57,7 +57,15 @@ def fetch_fireballs(days: int, cache_window: int) -> list[Fireball]:
     request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
-    if not isinstance(payload, dict) or int(payload.get("count", 0)) == 0:
+    if not isinstance(payload, dict):
+        return []
+    try:
+        count = int(payload.get("count", 0))
+    except (TypeError, ValueError) as exc:
+        # A non-numeric count is malformed data, not a stray TypeError/ValueError
+        # escaping as an unhandled 500: keep it a structured upstream error.
+        raise ValueError("JPL Fireball API returned malformed data") from exc
+    if count == 0:
         return []
     fields, rows = payload.get("fields"), payload.get("data")
     if not isinstance(fields, list) or not isinstance(rows, list):

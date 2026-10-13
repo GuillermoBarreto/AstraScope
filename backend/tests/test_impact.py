@@ -1,7 +1,10 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from backend.app.models.impact import NearEarthObject
 from backend.app.services.fireball_service import normalize_fireball
+import backend.app.services.fireball_service as fireball_service
 from backend.app.services.neo_service import normalize_neo
 import backend.app.api.impact as impact_api
 from backend.main import app
@@ -104,3 +107,53 @@ def test_neo_normalization_falls_back_to_name_for_id() -> None:
     item = normalize_neo(payload)
     assert item is not None
     assert item.id == "(2010 PK9)"
+
+
+class _FakeJsonResponse:
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args) -> bool:
+        return False
+
+
+def _fireball_payload(count):
+    return {
+        "count": count,
+        "fields": ["date", "energy", "impact-e"],
+        "data": [["2026-08-01 01:02:03", "2.5", "0.1"]],
+    }
+
+
+def test_fireball_malformed_count_returns_structured_error(monkeypatch) -> None:
+    # A non-numeric JPL "count" is malformed data: it must surface as the
+    # generic upstream error, not leak out as an unhandled 500.
+    monkeypatch.setattr(
+        fireball_service,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(json.dumps(_fireball_payload("many")).encode()),
+    )
+    fireball_service.fetch_fireballs.cache_clear()
+    body = TestClient(app).get("/api/impact/fireballs?days=31").json()
+    assert body["fireballs"] == []
+    assert body["source"] == "unavailable"
+    assert body["error"]["code"] == "UPSTREAM_UNAVAILABLE"
+
+
+def test_fireball_zero_count_returns_empty_without_error(monkeypatch) -> None:
+    monkeypatch.setattr(
+        fireball_service,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(json.dumps(_fireball_payload(0)).encode()),
+    )
+    fireball_service.fetch_fireballs.cache_clear()
+    body = TestClient(app).get("/api/impact/fireballs?days=32").json()
+    assert body["fireballs"] == []
+    assert body["source"] == "live-or-cache"
+    assert body["error"] is None

@@ -1,7 +1,6 @@
 import json
 import logging
 import re
-import ssl
 import time
 import csv
 import io
@@ -14,8 +13,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPCookieProcessor, HTTPSHandler, Request, build_opener, urlopen
 
-import certifi
-import truststore
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -27,10 +24,12 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports reposi
 
 try:
     from app.core.config import settings
+    from app.core.http import tls_context
     from app.core.parsing import optional_float
     from app.data.satellite_metadata import enrich_satellite
 except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
+    from backend.app.core.http import tls_context
     from backend.app.core.parsing import optional_float
     from backend.app.data.satellite_metadata import enrich_satellite
 
@@ -65,13 +64,6 @@ CELESTRAK_TIMEOUT_SECONDS = 120
 CACHE_SCHEMA_VERSION = 4
 last_failure_at = 0.0
 last_failure_error: str | None = None
-
-
-def tls_context() -> ssl.SSLContext:
-    try:
-        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    except (ImportError, NotImplementedError):
-        return ssl.create_default_context(cafile=certifi.where())
 
 
 @app.get("/health")
@@ -370,8 +362,17 @@ def fetch_public_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     )
     with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         content = response.read().decode("utf-8-sig")
-    objects = [normalize_satcat(row) for row in csv.DictReader(io.StringIO(content))]
-    objects = [item for item in objects if item["noradId"] > 0]
+    # Skip malformed rows individually: one bad SATCAT row (e.g. a non-numeric
+    # NORAD_CAT_ID) must not abort the whole sync and leave stale cache for
+    # all (mirrors the per-record skips in the orbital catalog fetches).
+    objects = []
+    for row in csv.DictReader(io.StringIO(content)):
+        try:
+            item = normalize_satcat(row)
+        except (ValueError, TypeError):
+            continue
+        if item["noradId"] > 0:
+            objects.append(item)
     if not objects:
         raise ValueError("CelesTrak SATCAT returned no catalog records")
     updated_at = datetime.now(timezone.utc).isoformat()
@@ -470,7 +471,17 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
     if not isinstance(payload, list) or not payload:
         raise ValueError("Space-Track returned no orbital records; verify the configured credentials")
 
-    satellites = [normalize(item, "space-track") for item in payload if isinstance(item, dict)]
+    # Skip malformed records individually: one bad Space-Track record (e.g. a
+    # non-numeric MEAN_MOTION) must not abort the whole sync and leave stale
+    # cache for all (mirrors fetch_catalog and fetch_satnogs_catalog).
+    satellites = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        try:
+            satellites.append(normalize(item, "space-track"))
+        except (ValueError, TypeError):
+            continue
     updated_at = datetime.now(timezone.utc).isoformat()
     write_disk_cache(satellites, updated_at, "spacetrack")
     return satellites, updated_at
