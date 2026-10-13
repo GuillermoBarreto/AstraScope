@@ -370,8 +370,17 @@ def fetch_public_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     )
     with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         content = response.read().decode("utf-8-sig")
-    objects = [normalize_satcat(row) for row in csv.DictReader(io.StringIO(content))]
-    objects = [item for item in objects if item["noradId"] > 0]
+    # Skip malformed rows individually: one bad SATCAT row (e.g. a non-numeric
+    # NORAD_CAT_ID) must not abort the whole sync and leave stale cache for
+    # all (mirrors the per-record skips in the orbital catalog fetches).
+    objects = []
+    for row in csv.DictReader(io.StringIO(content)):
+        try:
+            item = normalize_satcat(row)
+        except (ValueError, TypeError):
+            continue
+        if item["noradId"] > 0:
+            objects.append(item)
     if not objects:
         raise ValueError("CelesTrak SATCAT returned no catalog records")
     updated_at = datetime.now(timezone.utc).isoformat()
