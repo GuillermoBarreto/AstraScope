@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from ..core.http import tls_context
+from ..core.http import USER_AGENT, tls_context
 from ..core.parsing import optional_float
 from ..models.impact import Fireball
 
@@ -61,7 +61,7 @@ def _fetch_fireballs_cached(days: int, cache_window: int) -> list[Fireball]:
     del cache_window
     start = date.today() - timedelta(days=days)
     params = urlencode({"date-min": start.isoformat(), "vel-comp": "true", "sort": "-date"})
-    request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
+    request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, dict):

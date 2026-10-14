@@ -24,12 +24,12 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports reposi
 
 try:
     from app.core.config import settings
-    from app.core.http import tls_context
+    from app.core.http import USER_AGENT, tls_context
     from app.core.parsing import optional_float
     from app.data.satellite_metadata import enrich_satellite
 except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
-    from backend.app.core.http import tls_context
+    from backend.app.core.http import USER_AGENT, tls_context
     from backend.app.core.parsing import optional_float
     from backend.app.data.satellite_metadata import enrich_satellite
 
@@ -358,7 +358,7 @@ def fetch_public_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
     request = Request(
         CELESTRAK_SATCAT_URL,
-        headers={"User-Agent": "AstraScope/0.5"},
+        headers={"User-Agent": USER_AGENT},
     )
     with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         content = response.read().decode("utf-8-sig")
@@ -400,7 +400,7 @@ def public_catalog() -> tuple[list[dict[str, Any]], str, str, str | None]:
 @lru_cache(maxsize=1)
 def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
-    request = Request(CELESTRAK_URL, headers={"User-Agent": "AstraScope/0.2"})
+    request = Request(CELESTRAK_URL, headers={"User-Agent": USER_AGENT})
     with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
@@ -423,7 +423,7 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
 @lru_cache(maxsize=1)
 def fetch_satnogs_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
-    request = Request(SATNOGS_URL, headers={"User-Agent": "AstraScope/0.3", "Accept": "application/json"})
+    request = Request(SATNOGS_URL, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urlopen(request, timeout=45, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
@@ -457,14 +457,14 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
     login_request = Request(
         SPACE_TRACK_LOGIN_URL,
         data=login_body,
-        headers={"User-Agent": "AstraScope/0.4", "Content-Type": "application/x-www-form-urlencoded"},
+        headers={"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"},
     )
     with opener.open(login_request, timeout=30) as response:
         response.read()
 
     catalog_request = Request(
         SPACE_TRACK_GP_URL,
-        headers={"User-Agent": "AstraScope/0.4", "Accept": "application/json"},
+        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
     )
     with opener.open(catalog_request, timeout=90) as response:
         payload = json.load(response)
