@@ -670,6 +670,30 @@ def catalog_objects(
     }
 
 
+# Orbital-element fields a GP record may contribute to the object-detail
+# response. Catalog identity and status (id, name, objectType,
+# operationalStatus, launchDate, ...) always come from the SATCAT record: a
+# wholesale dict merge would overwrite them with the GP feed's defaults
+# ("UNKNOWN" status, "PAYLOAD" type), because upstream GP feeds carry no
+# OPS_STATUS_CODE or OBJECT_TYPE columns.
+ORBIT_DETAIL_FIELDS = (
+    "epoch",
+    "inclination",
+    "raan",
+    "eccentricity",
+    "argPericenter",
+    "meanAnomaly",
+    "meanMotion",
+    "bstar",
+    "meanMotionDot",
+    "meanMotionDdot",
+    "elementSetNo",
+    "orbitalDataUpdatedAt",
+    "tle1",
+    "tle2",
+)
+
+
 @app.get("/catalog/objects/{norad_id}")
 @app.get("/api/catalog/objects/{norad_id}")
 def catalog_object_detail(norad_id: int) -> dict[str, Any]:
@@ -679,7 +703,12 @@ def catalog_object_detail(norad_id: int) -> dict[str, Any]:
         return {"object": None, "updatedAt": updated_at, "source": source, "error": error or "Object not found"}
     cached_orbits = read_disk_cache()
     orbit_record = next((candidate for candidate in cached_orbits[0] if candidate.get("noradId") == norad_id), None) if cached_orbits else None
-    merged = {**item, **(orbit_record or {})}
+    merged = dict(item)
+    if orbit_record:
+        for field in ORBIT_DETAIL_FIELDS:
+            value = orbit_record.get(field)
+            if value is not None:
+                merged[field] = value
     merged["hasOrbitalData"] = orbit_record is not None
     merged["dataSources"] = {**item["dataSources"], **((orbit_record or {}).get("dataSources") or {})}
     return {"object": merged, "updatedAt": updated_at, "source": source, "error": error}

@@ -252,3 +252,38 @@ def test_public_catalog_skips_malformed_rows_individually(tmp_path, monkeypatch)
 
     assert [item["noradId"] for item in objects] == [25544, 2]
     assert updated_at
+
+
+def test_catalog_object_detail_preserves_satcat_identity(monkeypatch) -> None:
+    # A GP/orbital record carries no OPS_STATUS_CODE or OBJECT_TYPE columns,
+    # so its normalize() defaults ("UNKNOWN" status, "PAYLOAD" type) must not
+    # overwrite the SATCAT record's authoritative values in the detail view.
+    satcat = normalize_satcat(satcat_record(
+        OBJECT_NAME="COSMOS 2251 DEB",
+        OBJECT_ID="1993-036BL",
+        NORAD_CAT_ID="33777",
+        OBJECT_TYPE="DEB",
+        OPS_STATUS_CODE="D",
+    ))
+    orbit = normalize({
+        "OBJECT_NAME": "COSMOS 2251 DEB",
+        "OBJECT_ID": "1993-036BL",
+        "NORAD_CAT_ID": 33777,
+        "EPOCH": "2026-10-13T00:00:00Z",
+        "MEAN_MOTION": 15.5,
+        "INCLINATION": 74.0,
+    }, "celestrak-gp")
+    monkeypatch.setattr(main, "public_catalog", lambda: ([satcat], "now", "cache", None))
+    monkeypatch.setattr(main, "read_disk_cache", lambda: ([orbit], "now", "celestrak"))
+
+    body = main.catalog_object_detail(33777)["object"]
+
+    assert body["id"] == "norad-33777"
+    assert body["name"] == "COSMOS 2251 DEB"
+    assert body["objectType"] == "DEBRIS"
+    assert body["operationalStatus"] == "INACTIVE"
+    assert body["launchDate"] == "1998-11-20"
+    assert body["hasOrbitalData"] is True
+    assert body["meanMotion"] == 15.5
+    assert body["epoch"] == "2026-10-13T00:00:00Z"
+    assert body["dataSources"] == {"catalog": "celestrak-satcat", "orbit": "celestrak-gp"}
