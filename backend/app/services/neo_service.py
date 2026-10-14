@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from ..core.http import tls_context
+from ..core.http import USER_AGENT, tls_context
 from ..core.parsing import optional_float
 from ..models.impact import NearEarthObject
 
@@ -75,7 +75,7 @@ def _fetch_neos_cached(days: int, key_fingerprint: str, cache_window: int) -> li
         raise ValueError("NASA API key changed; NeoWs cache cleared, retry the request")
     start = date.today()
     params = urlencode({"start_date": start.isoformat(), "end_date": (start + timedelta(days=days - 1)).isoformat(), "api_key": api_key})
-    request = Request(f"{NEOWS_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
+    request = Request(f"{NEOWS_URL}?{params}", headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     days_payload = payload.get("near_earth_objects")

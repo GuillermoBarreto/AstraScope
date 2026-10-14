@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from ..core.http import tls_context
+from ..core.http import USER_AGENT, tls_context
 from ..core.parsing import optional_float
 from ..models.impact import Fireball
 
@@ -46,19 +46,29 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     )
 
 
-@lru_cache(maxsize=32)
 def fetch_fireballs(days: int, cache_window: int) -> list[Fireball]:
+    """Fetch fireballs, caching per (days, cache_window).
+
+    The day count is clamped before the cache key is built, so days=0 and
+    days=1 share a single cache entry instead of duplicating identical
+    upstream requests (mirrors fetch_neos in neo_service).
+    """
+    return _fetch_fireballs_cached(max(1, days), cache_window)
+
+
+@lru_cache(maxsize=32)
+def _fetch_fireballs_cached(days: int, cache_window: int) -> list[Fireball]:
     del cache_window
-    # A day count below 1 would push the start date into the future and
-    # ask JPL for an inverted range, so clamp it (mirrors fetch_neos).
-    days = max(1, days)
     start = date.today() - timedelta(days=days)
     params = urlencode({"date-min": start.isoformat(), "vel-comp": "true", "sort": "-date"})
-    request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": "AstraScope/0.5", "Accept": "application/json"})
+    request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, dict):
-        return []
+        # A non-object payload is malformed data, not an empty feed: surfacing
+        # it as a structured upstream error (like fetch_neos does) is more
+        # honest than reporting a successful sync with zero fireballs.
+        raise ValueError("JPL Fireball API returned malformed data")
     try:
         count = int(payload.get("count", 0))
     except (TypeError, ValueError) as exc:

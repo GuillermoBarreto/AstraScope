@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPCookieProcessor, HTTPSHandler, Request, build_opener, urlopen
 
@@ -24,12 +24,12 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports reposi
 
 try:
     from app.core.config import settings
-    from app.core.http import tls_context
+    from app.core.http import USER_AGENT, tls_context
     from app.core.parsing import optional_float
     from app.data.satellite_metadata import enrich_satellite
 except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
-    from backend.app.core.http import tls_context
+    from backend.app.core.http import USER_AGENT, tls_context
     from backend.app.core.parsing import optional_float
     from backend.app.data.satellite_metadata import enrich_satellite
 
@@ -358,7 +358,7 @@ def fetch_public_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
     request = Request(
         CELESTRAK_SATCAT_URL,
-        headers={"User-Agent": "AstraScope/0.5"},
+        headers={"User-Agent": USER_AGENT},
     )
     with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         content = response.read().decode("utf-8-sig")
@@ -390,7 +390,7 @@ def public_catalog() -> tuple[list[dict[str, Any]], str, str, str | None]:
         window = int(datetime.now(timezone.utc).timestamp() // SATCAT_CACHE_SECONDS)
         objects, updated_at = fetch_public_catalog(window)
         return objects, updated_at, "celestrak-satcat", None
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+    except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         logger.warning("SATCAT sync failed (%s): %s", type(exc).__name__, exc)
         if cached:
             return cached[0], cached[1], "stale-cache", f"{type(exc).__name__}: catalog sync failed"
@@ -400,7 +400,7 @@ def public_catalog() -> tuple[list[dict[str, Any]], str, str, str | None]:
 @lru_cache(maxsize=1)
 def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
-    request = Request(CELESTRAK_URL, headers={"User-Agent": "AstraScope/0.2"})
+    request = Request(CELESTRAK_URL, headers={"User-Agent": USER_AGENT})
     with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
@@ -423,7 +423,7 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
 @lru_cache(maxsize=1)
 def fetch_satnogs_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
-    request = Request(SATNOGS_URL, headers={"User-Agent": "AstraScope/0.3", "Accept": "application/json"})
+    request = Request(SATNOGS_URL, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urlopen(request, timeout=45, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
@@ -457,14 +457,14 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
     login_request = Request(
         SPACE_TRACK_LOGIN_URL,
         data=login_body,
-        headers={"User-Agent": "AstraScope/0.4", "Content-Type": "application/x-www-form-urlencoded"},
+        headers={"User-Agent": USER_AGENT, "Content-Type": "application/x-www-form-urlencoded"},
     )
     with opener.open(login_request, timeout=30) as response:
         response.read()
 
     catalog_request = Request(
         SPACE_TRACK_GP_URL,
-        headers={"User-Agent": "AstraScope/0.4", "Accept": "application/json"},
+        headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
     )
     with opener.open(catalog_request, timeout=90) as response:
         payload = json.load(response)
@@ -493,13 +493,13 @@ def fetch_primary_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str,
         try:
             satellites, updated_at = fetch_spacetrack_catalog(cache_window)
             return satellites, updated_at, "spacetrack"
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+        except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
             logger.warning("Space-Track catalog sync failed (%s): %s", type(exc).__name__, exc)
             errors.append("Space-Track unavailable")
     try:
         satellites, updated_at = fetch_catalog(cache_window)
         return satellites, updated_at, "celestrak"
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+    except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         logger.warning("CelesTrak catalog sync failed (%s): %s", type(exc).__name__, exc)
         errors.append("CelesTrak unavailable")
     raise ValueError("; ".join(errors))
@@ -542,12 +542,6 @@ def list_satellites(
             source = upstream
     except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         logger.warning("Primary orbital catalog unavailable (%s): %s", type(exc).__name__, exc)
-        detail = ""
-        if isinstance(exc, HTTPError):
-            try:
-                detail = exc.read().decode("utf-8", errors="replace").strip()
-            except OSError:
-                pass
         error = "Orbital catalog providers are temporarily unavailable"
         last_failure_at = time.time()
         last_failure_error = error
@@ -670,6 +664,30 @@ def catalog_objects(
     }
 
 
+# Orbital-element fields a GP record may contribute to the object-detail
+# response. Catalog identity and status (id, name, objectType,
+# operationalStatus, launchDate, ...) always come from the SATCAT record: a
+# wholesale dict merge would overwrite them with the GP feed's defaults
+# ("UNKNOWN" status, "PAYLOAD" type), because upstream GP feeds carry no
+# OPS_STATUS_CODE or OBJECT_TYPE columns.
+ORBIT_DETAIL_FIELDS = (
+    "epoch",
+    "inclination",
+    "raan",
+    "eccentricity",
+    "argPericenter",
+    "meanAnomaly",
+    "meanMotion",
+    "bstar",
+    "meanMotionDot",
+    "meanMotionDdot",
+    "elementSetNo",
+    "orbitalDataUpdatedAt",
+    "tle1",
+    "tle2",
+)
+
+
 @app.get("/catalog/objects/{norad_id}")
 @app.get("/api/catalog/objects/{norad_id}")
 def catalog_object_detail(norad_id: int) -> dict[str, Any]:
@@ -679,7 +697,12 @@ def catalog_object_detail(norad_id: int) -> dict[str, Any]:
         return {"object": None, "updatedAt": updated_at, "source": source, "error": error or "Object not found"}
     cached_orbits = read_disk_cache()
     orbit_record = next((candidate for candidate in cached_orbits[0] if candidate.get("noradId") == norad_id), None) if cached_orbits else None
-    merged = {**item, **(orbit_record or {})}
+    merged = dict(item)
+    if orbit_record:
+        for field in ORBIT_DETAIL_FIELDS:
+            value = orbit_record.get(field)
+            if value is not None:
+                merged[field] = value
     merged["hasOrbitalData"] = orbit_record is not None
     merged["dataSources"] = {**item["dataSources"], **((orbit_record or {}).get("dataSources") or {})}
     return {"object": merged, "updatedAt": updated_at, "source": source, "error": error}
