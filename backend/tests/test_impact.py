@@ -139,7 +139,7 @@ def test_fireball_malformed_count_returns_structured_error(monkeypatch) -> None:
         "urlopen",
         lambda *args, **kwargs: _FakeJsonResponse(json.dumps(_fireball_payload("many")).encode()),
     )
-    fireball_service.fetch_fireballs.cache_clear()
+    fireball_service._fetch_fireballs_cached.cache_clear()
     body = TestClient(app).get("/api/impact/fireballs?days=31").json()
     assert body["fireballs"] == []
     assert body["source"] == "unavailable"
@@ -152,8 +152,26 @@ def test_fireball_zero_count_returns_empty_without_error(monkeypatch) -> None:
         "urlopen",
         lambda *args, **kwargs: _FakeJsonResponse(json.dumps(_fireball_payload(0)).encode()),
     )
-    fireball_service.fetch_fireballs.cache_clear()
+    fireball_service._fetch_fireballs_cached.cache_clear()
     body = TestClient(app).get("/api/impact/fireballs?days=32").json()
     assert body["fireballs"] == []
     assert body["source"] == "live-or-cache"
     assert body["error"] is None
+
+
+def test_fireball_days_clamped_before_cache_key(monkeypatch) -> None:
+    # days=0 and days=1 request the same upstream range, so they must share a
+    # single lru_cache entry instead of issuing duplicate upstream calls.
+    calls = []
+
+    def fake_urlopen(*args, **kwargs):
+        calls.append(args)
+        return _FakeJsonResponse(json.dumps(_fireball_payload(1)).encode())
+
+    monkeypatch.setattr(fireball_service, "urlopen", fake_urlopen)
+    fireball_service._fetch_fireballs_cached.cache_clear()
+    first = fireball_service.fetch_fireballs(0, 12345)
+    second = fireball_service.fetch_fireballs(1, 12345)
+    assert first == second
+    assert len(first) == 1
+    assert len(calls) == 1
