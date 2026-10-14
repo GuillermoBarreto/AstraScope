@@ -65,7 +65,10 @@ def _fetch_fireballs_cached(days: int, cache_window: int) -> list[Fireball]:
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, dict):
-        return []
+        # A non-object payload is malformed data, not an empty feed: surfacing
+        # it as a structured upstream error (like fetch_neos does) is more
+        # honest than reporting a successful sync with zero fireballs.
+        raise ValueError("JPL Fireball API returned malformed data")
     try:
         count = int(payload.get("count", 0))
     except (TypeError, ValueError) as exc:

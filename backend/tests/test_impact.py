@@ -175,3 +175,18 @@ def test_fireball_days_clamped_before_cache_key(monkeypatch) -> None:
     assert first == second
     assert len(first) == 1
     assert len(calls) == 1
+
+
+def test_fireball_non_dict_payload_returns_structured_error(monkeypatch) -> None:
+    # A non-object JPL payload is malformed data: it must surface as the
+    # generic upstream error, not as a successful sync with zero fireballs.
+    monkeypatch.setattr(
+        fireball_service,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(json.dumps(["not", "a", "dict"]).encode()),
+    )
+    fireball_service._fetch_fireballs_cached.cache_clear()
+    body = TestClient(app).get("/api/impact/fireballs?days=33").json()
+    assert body["fireballs"] == []
+    assert body["source"] == "unavailable"
+    assert body["error"]["code"] == "UPSTREAM_UNAVAILABLE"
