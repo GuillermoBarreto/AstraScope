@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPCookieProcessor, HTTPSHandler, Request, build_opener, urlopen
 
@@ -390,7 +390,7 @@ def public_catalog() -> tuple[list[dict[str, Any]], str, str, str | None]:
         window = int(datetime.now(timezone.utc).timestamp() // SATCAT_CACHE_SECONDS)
         objects, updated_at = fetch_public_catalog(window)
         return objects, updated_at, "celestrak-satcat", None
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+    except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         logger.warning("SATCAT sync failed (%s): %s", type(exc).__name__, exc)
         if cached:
             return cached[0], cached[1], "stale-cache", f"{type(exc).__name__}: catalog sync failed"
@@ -493,13 +493,13 @@ def fetch_primary_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str,
         try:
             satellites, updated_at = fetch_spacetrack_catalog(cache_window)
             return satellites, updated_at, "spacetrack"
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+        except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
             logger.warning("Space-Track catalog sync failed (%s): %s", type(exc).__name__, exc)
             errors.append("Space-Track unavailable")
     try:
         satellites, updated_at = fetch_catalog(cache_window)
         return satellites, updated_at, "celestrak"
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
+    except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         logger.warning("CelesTrak catalog sync failed (%s): %s", type(exc).__name__, exc)
         errors.append("CelesTrak unavailable")
     raise ValueError("; ".join(errors))
@@ -542,12 +542,6 @@ def list_satellites(
             source = upstream
     except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         logger.warning("Primary orbital catalog unavailable (%s): %s", type(exc).__name__, exc)
-        detail = ""
-        if isinstance(exc, HTTPError):
-            try:
-                detail = exc.read().decode("utf-8", errors="replace").strip()
-            except OSError:
-                pass
         error = "Orbital catalog providers are temporarily unavailable"
         last_failure_at = time.time()
         last_failure_error = error
