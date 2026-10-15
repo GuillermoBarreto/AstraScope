@@ -57,7 +57,9 @@ METADATA_RULES: tuple[tuple[tuple[str, ...], dict[str, Any]], ...] = (
 def curated_metadata(name: str) -> dict[str, Any]:
     upper = name.upper()
     for tokens, metadata in METADATA_RULES:
-        if any(upper == token or upper.startswith(f"{token}-") or token in upper for token in tokens):
+        # token in upper already covers exact and prefix matches, so no
+        # separate == / startswith conditions are needed.
+        if any(token in upper for token in tokens):
             return dict(metadata)
     return {}
 

@@ -5,7 +5,7 @@ import time
 import csv
 import io
 from http.cookiejar import CookieJar
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -353,6 +353,24 @@ def write_public_catalog_cache(objects: list[dict[str, Any]], updated_at: str) -
     temporary.replace(PUBLIC_CATALOG_CACHE_FILE)
 
 
+def _cache_timestamp_age(updated_at: str) -> timedelta | None:
+    """Age of a cache ``updatedAt`` timestamp, treating naive stamps as UTC.
+
+    Cache files live on disk and can be hand-seeded; subtracting an
+    offset-naive datetime from an aware one raises TypeError, which would
+    surface as an unhandled 500 on every catalog endpoint. Normalize naive
+    stamps to UTC instead of crashing. Returns None when unparseable so the
+    caller falls through to a fresh sync.
+    """
+    try:
+        parsed = datetime.fromisoformat(updated_at)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - parsed
+
+
 @lru_cache(maxsize=1)
 def fetch_public_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     del cache_window
@@ -383,8 +401,8 @@ def fetch_public_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
 def public_catalog() -> tuple[list[dict[str, Any]], str, str, str | None]:
     cached = read_public_catalog_cache()
     if cached:
-        age = datetime.now(timezone.utc) - datetime.fromisoformat(cached[1])
-        if age.total_seconds() < SATCAT_CACHE_SECONDS:
+        age = _cache_timestamp_age(cached[1])
+        if age is not None and age.total_seconds() < SATCAT_CACHE_SECONDS:
             return cached[0], cached[1], "cache", None
     try:
         window = int(datetime.now(timezone.utc).timestamp() // SATCAT_CACHE_SECONDS)
@@ -404,7 +422,11 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
-        return [], datetime.now(timezone.utc).isoformat()
+        # A non-list payload (e.g. an upstream error object) is malformed
+        # data, not an empty catalog: raising lets fetch_primary_catalog fall
+        # through to the SatNOGS fallback instead of serving an empty sync
+        # labeled "celestrak" (mirrors fetch_satnogs_catalog).
+        raise ValueError("CelesTrak returned an invalid catalog")
     # Skip malformed records individually: one bad record (e.g. a non-numeric
     # MEAN_MOTION) must not abort the whole sync and leave stale cache for all.
     satellites = []
@@ -521,7 +543,7 @@ def list_satellites(
     try:
         cache_window = int(datetime.now(timezone.utc).timestamp() // CACHE_SECONDS)
         if cached:
-            cache_age = datetime.now(timezone.utc) - datetime.fromisoformat(cached[1])
+            cache_age = _cache_timestamp_age(cached[1])
         else:
             cache_age = None
         if cached and cache_age and cache_age.total_seconds() < CACHE_SECONDS and cached[2] in {"celestrak", "spacetrack"}:
