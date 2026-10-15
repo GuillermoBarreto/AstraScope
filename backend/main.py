@@ -404,7 +404,11 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
     with urlopen(request, timeout=CELESTRAK_TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, list):
-        return [], datetime.now(timezone.utc).isoformat()
+        # A non-list payload (e.g. an upstream error object) is malformed
+        # data, not an empty catalog: raising lets fetch_primary_catalog fall
+        # through to the SatNOGS fallback instead of serving an empty sync
+        # labeled "celestrak" (mirrors fetch_satnogs_catalog).
+        raise ValueError("CelesTrak returned an invalid catalog")
     # Skip malformed records individually: one bad record (e.g. a non-numeric
     # MEAN_MOTION) must not abort the whole sync and leave stale cache for all.
     satellites = []

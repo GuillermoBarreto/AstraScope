@@ -3,6 +3,8 @@ import io
 import json
 import time
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 import backend.main as main
@@ -252,6 +254,33 @@ def test_public_catalog_skips_malformed_rows_individually(tmp_path, monkeypatch)
 
     assert [item["noradId"] for item in objects] == [25544, 2]
     assert updated_at
+
+
+def test_fetch_catalog_rejects_non_list_payload(monkeypatch, tmp_path) -> None:
+    # A non-list CelesTrak payload (e.g. an upstream error object) must raise
+    # instead of serving an empty sync labeled "celestrak" with no error.
+    monkeypatch.setattr(main, "CACHE_FILE", tmp_path / "active-satellites.json")
+    main.fetch_catalog.cache_clear()
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self._body = body
+
+        def read(self) -> bytes:
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    monkeypatch.setattr(main, "urlopen", lambda *args, **kwargs: FakeResponse(b'{"error": "upstream busy"}'))
+    try:
+        with pytest.raises(ValueError, match="invalid catalog"):
+            main.fetch_catalog(1)
+    finally:
+        main.fetch_catalog.cache_clear()
 
 
 def test_catalog_object_detail_preserves_satcat_identity(monkeypatch) -> None:
