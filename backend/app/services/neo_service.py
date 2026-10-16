@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 from urllib.parse import urlencode
@@ -73,7 +73,10 @@ def _fetch_neos_cached(days: int, key_fingerprint: str, cache_window: int) -> li
         # stale entries instead of serving them under a different key.
         _fetch_neos_cached.cache_clear()
         raise ValueError("NASA API key changed; NeoWs cache cleared, retry the request")
-    start = date.today()
+    # Anchor the query window to UTC: date.today() is server-local and can
+    # shift the requested range by a day near midnight (every other upstream
+    # window in this codebase is UTC-anchored).
+    start = datetime.now(timezone.utc).date()
     params = urlencode({"start_date": start.isoformat(), "end_date": (start + timedelta(days=days - 1)).isoformat(), "api_key": api_key})
     request = Request(f"{NEOWS_URL}?{params}", headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:

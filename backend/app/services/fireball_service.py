@@ -1,6 +1,6 @@
 import json
 import math
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
 from urllib.parse import urlencode
@@ -34,7 +34,9 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     velocity = math.sqrt(sum(value * value for value in components)) if all(value is not None for value in components) else None
     location = f"{abs(latitude):.1f}° {'N' if latitude >= 0 else 'S'}, {abs(longitude):.1f}° {'E' if longitude >= 0 else 'W'}" if latitude is not None and longitude is not None else None
     return Fireball(
-        id=str(timestamp).replace(" ", "T").replace(":", "-") + (f"-{latitude}-{longitude}" if location else ""),
+        # Use abs() for the coordinate suffix: a negative latitude/longitude
+        # would otherwise render as a double dash ("--10.0--20.0") in the id.
+        id=str(timestamp).replace(" ", "T").replace(":", "-") + (f"-{abs(latitude)}-{abs(longitude)}" if location else ""),
         dateTime=str(timestamp).replace(" ", "T") + "Z",
         latitude=latitude,
         longitude=longitude,
@@ -59,7 +61,9 @@ def fetch_fireballs(days: int, cache_window: int) -> list[Fireball]:
 @lru_cache(maxsize=32)
 def _fetch_fireballs_cached(days: int, cache_window: int) -> list[Fireball]:
     del cache_window
-    start = date.today() - timedelta(days=days)
+    # Anchor the query window to UTC: date.today() is server-local and can
+    # shift the requested range by a day near midnight (mirrors fetch_neos).
+    start = datetime.now(timezone.utc).date() - timedelta(days=days)
     params = urlencode({"date-min": start.isoformat(), "vel-comp": "true", "sort": "-date"})
     request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
