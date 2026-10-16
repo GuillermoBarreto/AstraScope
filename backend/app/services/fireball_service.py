@@ -34,7 +34,9 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     velocity = math.sqrt(sum(value * value for value in components)) if all(value is not None for value in components) else None
     location = f"{abs(latitude):.1f}° {'N' if latitude >= 0 else 'S'}, {abs(longitude):.1f}° {'E' if longitude >= 0 else 'W'}" if latitude is not None and longitude is not None else None
     return Fireball(
-        id=str(timestamp).replace(" ", "T").replace(":", "-") + (f"-{latitude}-{longitude}" if location else ""),
+        # Use abs() for the coordinate suffix: a negative latitude/longitude
+        # would otherwise render as a double dash ("--10.0--20.0") in the id.
+        id=str(timestamp).replace(" ", "T").replace(":", "-") + (f"-{abs(latitude)}-{abs(longitude)}" if location else ""),
         dateTime=str(timestamp).replace(" ", "T") + "Z",
         latitude=latitude,
         longitude=longitude,
