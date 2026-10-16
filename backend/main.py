@@ -471,7 +471,8 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
     if not settings.has_space_track_credentials():
         raise ValueError("Space-Track credentials are not configured")
 
-    opener = build_opener(HTTPCookieProcessor(CookieJar()), HTTPSHandler(context=tls_context()))
+    jar = CookieJar()
+    opener = build_opener(HTTPCookieProcessor(jar), HTTPSHandler(context=tls_context()))
     login_body = urlencode({
         "identity": settings.space_track_identity,
         "password": settings.space_track_password,
@@ -483,6 +484,11 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
     )
     with opener.open(login_request, timeout=30) as response:
         response.read()
+    if not jar:
+        # The login POST answered HTTP 200 but issued no session cookie, so
+        # the catalog query below cannot be authenticated: fail fast with the
+        # real cause instead of a misleading "no orbital records" error.
+        raise ValueError("Space-Track login failed; verify the configured credentials")
 
     catalog_request = Request(
         SPACE_TRACK_GP_URL,
