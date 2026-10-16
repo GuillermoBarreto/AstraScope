@@ -746,10 +746,20 @@ def catalog_orbits(
     response = list_satellites()
     records = response["satellites"]
     if mode == "active":
-        records = [
-            item for item in records
-            if item["objectType"] == "PAYLOAD" and item.get("operationalStatus") == "ACTIVE"
-        ]
+        # GP/orbital records carry no OPS_STATUS_CODE column, so their
+        # operationalStatus is always UNKNOWN and filtering on it would make
+        # the default mode=active return zero objects. Resolve "active"
+        # against the authoritative SATCAT catalog instead (same predicate as
+        # filter_catalog_objects' mode="active").
+        satcat_objects, _, _, _ = public_catalog()
+        active_ids = {
+            item["noradId"]
+            for item in satcat_objects
+            if item["objectType"] == "PAYLOAD"
+            and item["operationalStatus"] == "ACTIVE"
+            and not item["decayDate"]
+        }
+        records = [item for item in records if item.get("noradId") in active_ids]
     if not debris:
         records = [item for item in records if item["objectType"] != "DEBRIS"]
     if not rocket_bodies:
