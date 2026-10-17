@@ -552,7 +552,10 @@ def list_satellites(
             cache_age = _cache_timestamp_age(cached[1])
         else:
             cache_age = None
-        if cached and cache_age and cache_age.total_seconds() < CACHE_SECONDS and cached[2] in {"celestrak", "spacetrack"}:
+        if cached and cache_age and cache_age.total_seconds() < CACHE_SECONDS and cached[2] in {"celestrak", "spacetrack", "satnogs"}:
+            # A cache written by the SatNOGS fallback is fresh provider data,
+            # not stale: its age is still bounded by CACHE_SECONDS, and the
+            # "satnogs" upstream label already tells clients where it came from.
             satellites, updated_at, upstream = cached
             source = "cache"
         elif time.time() - last_failure_at < FAILURE_RETRY_SECONDS:

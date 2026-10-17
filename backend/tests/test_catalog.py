@@ -348,3 +348,22 @@ def test_retry_gate_reports_unavailable_when_satnogs_also_fails(monkeypatch) -> 
     assert response["source"] == "unavailable"
     assert response["satellites"] == []
     assert response["total"] == 0
+
+
+def test_fresh_satnogs_cache_served_as_cache_not_stale(monkeypatch) -> None:
+    # A disk cache written minutes ago by the SatNOGS fallback is fresh
+    # provider data: it must be served as "cache", not "stale-cache" with the
+    # primary's failure error attached.
+    from datetime import datetime, timezone
+    fresh_stamp = datetime.now(timezone.utc).isoformat()
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], fresh_stamp, "satnogs")
+    )
+    monkeypatch.setattr(main, "last_failure_at", 0.0)
+
+    response = main.list_satellites(operator=None, orbit=None, search=None)
+
+    assert response["source"] == "cache"
+    assert response["upstream"] == "satnogs"
+    assert response["error"] is None
+    assert response["total"] == 1
