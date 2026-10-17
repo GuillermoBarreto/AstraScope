@@ -61,3 +61,29 @@ describe('Impact feed request deadlines', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe('Impact feed error reporting', () => {
+  it('surfaces the backend error message on non-ok responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: { code: 'UPSTREAM_UNAVAILABLE', message: 'NASA NeoWs is down for maintenance.' } }),
+    }));
+    const { result } = renderHook(() => useImpactFeed('neos', 7, 0));
+    await act(async () => {});
+    expect(result.current.loading).toBe(false);
+    expect(result.current.payload).toBeNull();
+    expect(result.current.error).toBe('NASA NeoWs is down for maintenance.');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('falls back to the generic message when the error body is unreadable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => { throw new Error('bad json'); },
+    }));
+    const { result } = renderHook(() => useImpactFeed('neos', 7, 0));
+    await act(async () => {});
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBe('Data is temporarily unavailable.');
+  });
+});

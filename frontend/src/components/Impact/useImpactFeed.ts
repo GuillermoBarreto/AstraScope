@@ -20,7 +20,14 @@ export function useImpactFeed<T extends 'neos' | 'fireballs'>(feed: T, days: num
     async function load() {
       try {
         const response = await fetch(apiUrl(`/impact/${feed}?days=${days}`), { signal: controller.signal });
-        if (!response.ok) throw new Error('Request failed');
+        if (!response.ok) {
+          // Non-2xx responses carry the backend's structured error payload;
+          // surface its message instead of a generic failure notice.
+          const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+          if (controller.signal.aborted) return;
+          setError(body?.error?.message ?? 'Data is temporarily unavailable.');
+          return;
+        }
         const result = await response.json() as ImpactResponse<T>;
         if (controller.signal.aborted) return;
         setPayload(result);
