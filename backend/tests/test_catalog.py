@@ -316,3 +316,54 @@ def test_catalog_object_detail_preserves_satcat_identity(monkeypatch) -> None:
     assert body["meanMotion"] == 15.5
     assert body["epoch"] == "2026-10-13T00:00:00Z"
     assert body["dataSources"] == {"catalog": "celestrak-satcat", "orbit": "celestrak-gp"}
+
+
+def test_retry_gate_attempts_satnogs_fallback_without_cache(monkeypatch) -> None:
+    # Issue #51: the 5-minute retry gate must not suppress the independent
+    # SatNOGS fallback when no disk cache exists.
+    monkeypatch.setattr(main, "read_disk_cache", lambda: None)
+    monkeypatch.setattr(main, "last_failure_at", time.time())
+    monkeypatch.setattr(main, "last_failure_error", "Orbital catalog providers are temporarily unavailable")
+    monkeypatch.setattr(main, "fetch_satnogs_catalog", lambda _cache_window: ([{"noradId": 25544}], "now"))
+
+    response = main.list_satellites(operator=None, orbit=None, search=None)
+
+    assert response["source"] == "satnogs"
+    assert response["upstream"] == "satnogs"
+    assert response["total"] == 1
+
+
+def test_retry_gate_reports_unavailable_when_satnogs_also_fails(monkeypatch) -> None:
+    monkeypatch.setattr(main, "read_disk_cache", lambda: None)
+    monkeypatch.setattr(main, "last_failure_at", time.time())
+    monkeypatch.setattr(main, "last_failure_error", "Orbital catalog providers are temporarily unavailable")
+
+    def fail_satnogs(_cache_window: int):
+        raise ValueError("SatNOGS down")
+
+    monkeypatch.setattr(main, "fetch_satnogs_catalog", fail_satnogs)
+
+    response = main.list_satellites(operator=None, orbit=None, search=None)
+
+    assert response["source"] == "unavailable"
+    assert response["satellites"] == []
+    assert response["total"] == 0
+
+
+def test_fresh_satnogs_cache_served_as_cache_not_stale(monkeypatch) -> None:
+    # A disk cache written minutes ago by the SatNOGS fallback is fresh
+    # provider data: it must be served as "cache", not "stale-cache" with the
+    # primary's failure error attached.
+    from datetime import datetime, timezone
+    fresh_stamp = datetime.now(timezone.utc).isoformat()
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], fresh_stamp, "satnogs")
+    )
+    monkeypatch.setattr(main, "last_failure_at", 0.0)
+
+    response = main.list_satellites(operator=None, orbit=None, search=None)
+
+    assert response["source"] == "cache"
+    assert response["upstream"] == "satnogs"
+    assert response["error"] is None
+    assert response["total"] == 1

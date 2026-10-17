@@ -552,7 +552,10 @@ def list_satellites(
             cache_age = _cache_timestamp_age(cached[1])
         else:
             cache_age = None
-        if cached and cache_age and cache_age.total_seconds() < CACHE_SECONDS and cached[2] in {"celestrak", "spacetrack"}:
+        if cached and cache_age and cache_age.total_seconds() < CACHE_SECONDS and cached[2] in {"celestrak", "spacetrack", "satnogs"}:
+            # A cache written by the SatNOGS fallback is fresh provider data,
+            # not stale: its age is still bounded by CACHE_SECONDS, and the
+            # "satnogs" upstream label already tells clients where it came from.
             satellites, updated_at, upstream = cached
             source = "cache"
         elif time.time() - last_failure_at < FAILURE_RETRY_SECONDS:
@@ -561,10 +564,18 @@ def list_satellites(
                 satellites, updated_at, upstream = cached
                 source = "stale-cache"
             else:
-                satellites = []
-                updated_at = datetime.now(timezone.utc).isoformat()
-                source = "unavailable"
-                upstream = None
+                try:
+                    # The retry gate only covers the primary upstream: SatNOGS is
+                    # an independent provider that may succeed on retry, so try
+                    # it before reporting unavailable (fixes #51).
+                    satellites, updated_at = fetch_satnogs_catalog(cache_window)
+                    source = "satnogs"
+                    upstream = "satnogs"
+                except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError):
+                    satellites = []
+                    updated_at = datetime.now(timezone.utc).isoformat()
+                    source = "unavailable"
+                    upstream = None
         else:
             satellites, updated_at, upstream = fetch_primary_catalog(cache_window)
             source = upstream
