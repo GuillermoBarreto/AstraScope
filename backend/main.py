@@ -561,10 +561,18 @@ def list_satellites(
                 satellites, updated_at, upstream = cached
                 source = "stale-cache"
             else:
-                satellites = []
-                updated_at = datetime.now(timezone.utc).isoformat()
-                source = "unavailable"
-                upstream = None
+                try:
+                    # The retry gate only covers the primary upstream: SatNOGS is
+                    # an independent provider that may succeed on retry, so try
+                    # it before reporting unavailable (fixes #51).
+                    satellites, updated_at = fetch_satnogs_catalog(cache_window)
+                    source = "satnogs"
+                    upstream = "satnogs"
+                except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError):
+                    satellites = []
+                    updated_at = datetime.now(timezone.utc).isoformat()
+                    source = "unavailable"
+                    upstream = None
         else:
             satellites, updated_at, upstream = fetch_primary_catalog(cache_window)
             source = upstream
