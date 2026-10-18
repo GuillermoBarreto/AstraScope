@@ -86,4 +86,15 @@ describe('Impact feed error reporting', () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBe('Data is temporarily unavailable.');
   });
+
+  it('falls back to the generic message when the backend message is blank', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: { code: 'UPSTREAM_UNAVAILABLE', message: '' } }),
+    }));
+    const { result } = renderHook(() => useImpactFeed('neos', 7, 0));
+    await act(async () => {});
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBe('Data is temporarily unavailable.');
+  });
 });
