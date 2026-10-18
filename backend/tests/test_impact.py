@@ -190,3 +190,19 @@ def test_fireball_non_dict_payload_returns_structured_error(monkeypatch) -> None
     assert body["fireballs"] == []
     assert body["source"] == "unavailable"
     assert body["error"]["code"] == "UPSTREAM_UNAVAILABLE"
+
+
+def test_fireball_normalization_does_not_double_stamp_timezone() -> None:
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    row = ["2026-08-01T01:02:03Z", "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"]
+    item = normalize_fireball(fields, row)
+    assert item is not None
+    assert item.dateTime == "2026-08-01T01:02:03Z"
+    row[0] = "2026-08-01 01:02:03+00:00"
+    item = normalize_fireball(fields, row)
+    assert item is not None
+    assert item.dateTime == "2026-08-01T01:02:03+00:00"
+    row[0] = "2026-08-01 01:02:03"
+    item = normalize_fireball(fields, row)
+    assert item is not None
+    assert item.dateTime == "2026-08-01T01:02:03Z"

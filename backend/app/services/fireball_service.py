@@ -1,5 +1,6 @@
 import json
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any
@@ -21,6 +22,13 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     impact_energy = optional_float(record.get("impact-e"))
     if not timestamp or energy is None or impact_energy is None:
         return None
+    # CNEOS usually returns bare "YYYY-MM-DD HH:MM:SS" stamps, but only stamp
+    # the value as UTC when it carries no timezone designator: blindly
+    # appending "Z" to an already-zoned timestamp would produce malformed ISO
+    # like "...ZZ" or a doubled offset.
+    date_time = str(timestamp).replace(" ", "T")
+    if not re.search(r"(?:Z|[+-]\d{2}:?\d{2})$", date_time, re.IGNORECASE):
+        date_time += "Z"
     latitude = optional_float(record.get("lat"))
     longitude = optional_float(record.get("lon"))
     # Use -abs(): the API sometimes already returns a signed value alongside
@@ -37,7 +45,7 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
         # Use abs() for the coordinate suffix: a negative latitude/longitude
         # would otherwise render as a double dash ("--10.0--20.0") in the id.
         id=str(timestamp).replace(" ", "T").replace(":", "-") + (f"-{abs(latitude)}-{abs(longitude)}" if location else ""),
-        dateTime=str(timestamp).replace(" ", "T") + "Z",
+        dateTime=date_time,
         latitude=latitude,
         longitude=longitude,
         altitudeKm=optional_float(record.get("alt")),
