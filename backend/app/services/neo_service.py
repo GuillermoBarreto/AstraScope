@@ -14,16 +14,27 @@ NEOWS_URL = "https://api.nasa.gov/neo/rest/v1/feed"
 TIMEOUT_SECONDS = 20
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    """Return ``value`` when it is a dict, else an empty dict.
+
+    Upstream nested objects are sometimes null or a stray scalar instead of
+    an object; calling .get() on those raises AttributeError.
+    """
+    return value if isinstance(value, dict) else {}
+
+
 def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     approaches = entry.get("close_approach_data")
     if not isinstance(approaches, list) or not approaches or not isinstance(approaches[0], dict):
         return None
     approach = approaches[0]
-    # NASA sometimes returns null for nested objects; treat them as empty dicts
-    # instead of crashing with AttributeError.
-    diameter = (entry.get("estimated_diameter") or {}).get("kilometers") or {}
-    velocity = approach.get("relative_velocity") or {}
-    distance = approach.get("miss_distance") or {}
+    # NASA sometimes returns null (or a non-object value) for nested objects;
+    # treat them as empty dicts instead of crashing with AttributeError. An
+    # AttributeError here would escape impact.py's except clause as an
+    # unhandled 500 for the whole feed, not a skipped record.
+    diameter = _as_dict(_as_dict(entry.get("estimated_diameter")).get("kilometers"))
+    velocity = _as_dict(approach.get("relative_velocity"))
+    distance = _as_dict(approach.get("miss_distance"))
     approach_date = str(approach.get("close_approach_date") or "")
     if not approach_date:
         return None

@@ -80,3 +80,20 @@ def test_fetch_neos_detects_key_rotation(monkeypatch) -> None:
             neo_service._fetch_neos_cached(7, neo_service._key_fingerprint("original-key"), 1)
     finally:
         neo_service._fetch_neos_cached.cache_clear()
+
+
+def test_normalize_neo_tolerates_non_dict_nested_objects() -> None:
+    # A non-dict truthy value (stray scalar) in a nested object must be
+    # treated like null: skipped, not an AttributeError escaping as an
+    # unhandled 500 for the whole feed.
+    payload = _payload()
+    payload["estimated_diameter"] = "n/a"
+    approach = payload["close_approach_data"][0]
+    approach["relative_velocity"] = "n/a"
+    approach["miss_distance"] = ["not", "a", "dict"]
+    item = normalize_neo(payload)
+    assert item is not None
+    assert item.estimatedDiameterMinKm is None
+    assert item.estimatedDiameterMaxKm is None
+    assert item.relativeVelocityKmS is None
+    assert item.missDistanceKm is None

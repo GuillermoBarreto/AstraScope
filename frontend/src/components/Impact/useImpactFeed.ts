@@ -25,13 +25,15 @@ export function useImpactFeed<T extends 'neos' | 'fireballs'>(feed: T, days: num
           // surface its message instead of a generic failure notice.
           const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
           if (controller.signal.aborted) return;
-          setError(body?.error?.message ?? 'Data is temporarily unavailable.');
+          // Use || so a blank backend message falls back to the generic
+          // notice instead of surfacing an invisible empty error string.
+          setError(body?.error?.message || 'Data is temporarily unavailable.');
           return;
         }
         const result = await response.json() as ImpactResponse<T>;
         if (controller.signal.aborted) return;
         setPayload(result);
-        setError(result.error?.message ?? (result.source === 'unavailable' ? 'Source unavailable.' : null));
+        setError(result.error?.message || (result.source === 'unavailable' ? 'Source unavailable.' : null));
       } catch {
         if (controller.signal.aborted) return;
         setError('Data is temporarily unavailable.');

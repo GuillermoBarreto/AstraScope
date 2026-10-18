@@ -367,3 +367,46 @@ def test_fresh_satnogs_cache_served_as_cache_not_stale(monkeypatch) -> None:
     assert response["upstream"] == "satnogs"
     assert response["error"] is None
     assert response["total"] == 1
+
+
+def test_retry_gate_prefers_live_satnogs_over_stale_cache(monkeypatch) -> None:
+    # A stale disk cache must not shadow a working SatNOGS fallback: the
+    # retry gate suppresses the primary upstream, not the independent
+    # fallback (extends #51).
+    from datetime import datetime, timedelta, timezone
+    stale_stamp = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], stale_stamp, "celestrak")
+    )
+    monkeypatch.setattr(main, "last_failure_at", time.time())
+    monkeypatch.setattr(main, "last_failure_error", "Orbital catalog providers are temporarily unavailable")
+    monkeypatch.setattr(main, "fetch_satnogs_catalog", lambda _cache_window: ([{"noradId": 25544}], "now"))
+
+    response = main.list_satellites(operator=None, orbit=None, search=None)
+
+    assert response["source"] == "satnogs"
+    assert response["upstream"] == "satnogs"
+    # Live fallback data must not be paired with the primary's stale error.
+    assert response["error"] is None
+    assert response["total"] == 1
+
+
+def test_retry_gate_serves_stale_cache_when_satnogs_also_fails(monkeypatch) -> None:
+    from datetime import datetime, timedelta, timezone
+    stale_stamp = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], stale_stamp, "celestrak")
+    )
+    monkeypatch.setattr(main, "last_failure_at", time.time())
+    monkeypatch.setattr(main, "last_failure_error", "Orbital catalog providers are temporarily unavailable")
+
+    def fail_satnogs(_cache_window: int):
+        raise ValueError("SatNOGS down")
+
+    monkeypatch.setattr(main, "fetch_satnogs_catalog", fail_satnogs)
+
+    response = main.list_satellites(operator=None, orbit=None, search=None)
+
+    assert response["source"] == "stale-cache"
+    assert response["error"] == "Orbital catalog providers are temporarily unavailable"
+    assert response["total"] == 1
