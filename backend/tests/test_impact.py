@@ -206,3 +206,20 @@ def test_fireball_normalization_does_not_double_stamp_timezone() -> None:
     item = normalize_fireball(fields, row)
     assert item is not None
     assert item.dateTime == "2026-08-01T01:02:03Z"
+
+
+def test_fireball_id_derives_from_normalized_datetime() -> None:
+    # The id slug must come from the already-normalized dateTime, not the raw
+    # upstream stamp: a bare "Z" designator must not leak into the id, and
+    # equivalent notations of the same instant must produce the same id.
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    cases = [
+        ("2026-08-01 01:02:03", "2026-08-01T01:02:03Z", "2026-08-01T01-02-03-10.0-20.0"),
+        ("2026-08-01T01:02:03Z", "2026-08-01T01:02:03Z", "2026-08-01T01-02-03-10.0-20.0"),
+        ("2026-08-01 01:02:03+00:00", "2026-08-01T01:02:03+00:00", "2026-08-01T01-02-03+00-00-10.0-20.0"),
+    ]
+    for stamp, expected_datetime, expected_id in cases:
+        item = normalize_fireball(fields, [stamp, "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"])
+        assert item is not None
+        assert item.dateTime == expected_datetime
+        assert item.id == expected_id
