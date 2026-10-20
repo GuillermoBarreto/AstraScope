@@ -244,9 +244,15 @@ def _tle_float(text: str) -> float:
         raise ValueError("Invalid SatNOGS TLE record") from exc
 
 
+# Two-digit-year pivot for TLE epoch and international-designator fields: a
+# year below 57 belongs to the 2000s, 57 and above to the 1900s. Kept in one
+# place so tle_epoch and tle_object_id can never drift apart.
+TLE_YEAR_PIVOT = 57
+
+
 def tle_epoch(value: str) -> str:
     year = _tle_int(value[:2])
-    full_year = 2000 + year if year < 57 else 1900 + year
+    full_year = 2000 + year if year < TLE_YEAR_PIVOT else 1900 + year
     day = _tle_float(value[2:])
     start = datetime(full_year, 1, 1, tzinfo=timezone.utc)
     return datetime.fromtimestamp(start.timestamp() + (day - 1) * 86400, timezone.utc).isoformat()
@@ -257,7 +263,7 @@ def tle_object_id(value: str) -> str:
     if len(compact) < 5:
         return compact or "unknown"
     year = _tle_int(compact[:2])
-    full_year = 2000 + year if year < 57 else 1900 + year
+    full_year = 2000 + year if year < TLE_YEAR_PIVOT else 1900 + year
     return f"{full_year}-{compact[2:5]}{compact[5:]}"
 
 

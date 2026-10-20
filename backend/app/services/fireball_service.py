@@ -45,7 +45,10 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     # timestamp: a zoned upstream stamp ("...+00:00" or "...Z") would otherwise
     # leak its designator into the id while dateTime is normalized separately,
     # so ids silently drift whenever the upstream format changes.
-    slug = date_time.removesuffix("Z").replace(":", "-")
+    # Strip any timezone designator (a trailing "Z" or a numeric ±HH:MM/±HHMM
+    # offset): CNEOS stamps are UTC, and a format change from a bare stamp to
+    # a zoned one must not change the id for the same event.
+    slug = re.sub(r"(?:Z|[+-]\d{2}:?\d{2})$", "", date_time, flags=re.IGNORECASE).replace(":", "-")
     return Fireball(
         # Use abs() for the coordinate suffix: a negative latitude/longitude
         # would otherwise render as a double dash ("--10.0--20.0") in the id.

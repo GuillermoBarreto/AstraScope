@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import backend.main as main
-from backend.main import api_root, health_check, identify_operator, identify_purpose, normalize, normalize_satcat, normalize_satnogs, object_type, operational_status, orbit_class
+from backend.main import api_root, health_check, identify_operator, identify_purpose, normalize, normalize_satcat, normalize_satnogs, object_type, operational_status, orbit_class, tle_epoch, tle_object_id
 from backend.app.data.satellite_metadata import curated_metadata
 from backend.app.core.config import Settings
 
@@ -19,6 +19,18 @@ ISS = {
     "tle2": "2 25544  51.6315  70.8679 0007172   4.7554 355.3502 15.49313226578933",
     "norad_cat_id": 25544,
 }
+
+
+def test_tle_year_pivot_boundary() -> None:
+    # The two-digit-year pivot lives in one constant: years below 57 belong
+    # to the 2000s, 57 and above to the 1900s, in both tle_epoch and
+    # tle_object_id.
+    epoch_56 = tle_epoch("56214.5")
+    assert epoch_56.startswith("2056-")
+    epoch_57 = tle_epoch("57214.5")
+    assert epoch_57.startswith("1957-")
+    assert tle_object_id("56067A") == "2056-067A"
+    assert tle_object_id("98067A") == "1998-067A"
 
 
 def test_normalize_satnogs_tle() -> None:
