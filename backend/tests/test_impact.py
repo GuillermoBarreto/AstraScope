@@ -216,10 +216,11 @@ def test_fireball_id_derives_from_normalized_datetime() -> None:
     cases = [
         ("2026-08-01 01:02:03", "2026-08-01T01:02:03Z", "2026-08-01T01-02-03-10.0-20.0"),
         ("2026-08-01T01:02:03Z", "2026-08-01T01:02:03Z", "2026-08-01T01-02-03-10.0-20.0"),
-        ("2026-08-01 01:02:03+00:00", "2026-08-01T01:02:03+00:00", "2026-08-01T01-02-03+00-00-10.0-20.0"),
+        ("2026-08-01 01:02:03+00:00", "2026-08-01T01:02:03+00:00", "2026-08-01T01-02-03-10.0-20.0"),
     ]
     for stamp, expected_datetime, expected_id in cases:
         item = normalize_fireball(fields, [stamp, "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"])
         assert item is not None
         assert item.dateTime == expected_datetime
         assert item.id == expected_id
+
