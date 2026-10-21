@@ -6,6 +6,9 @@ import truststore
 USER_AGENT = "AstraScope/0.5"
 """Single User-Agent for every upstream request (fetchers had drifted to 0.2-0.5)."""
 
+REQUEST_TIMEOUT_SECONDS = 20
+"""One upstream request timeout shared by every fetcher (both services had drifted to their own copy of 20)."""
+
 _tls_context: ssl.SSLContext | None = None
 
 
