@@ -6,14 +6,11 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from ..core.http import USER_AGENT, tls_context
+from ..core.http import REQUEST_TIMEOUT_SECONDS, USER_AGENT, tls_context
 from ..core.parsing import optional_float
 from ..models.impact import NearEarthObject
 
 NEOWS_URL = "https://api.nasa.gov/neo/rest/v1/feed"
-TIMEOUT_SECONDS = 20
-
-
 def _as_dict(value: Any) -> dict[str, Any]:
     """Return ``value`` when it is a dict, else an empty dict.
 
@@ -90,7 +87,7 @@ def _fetch_neos_cached(days: int, key_fingerprint: str, cache_window: int) -> li
     start = datetime.now(timezone.utc).date()
     params = urlencode({"start_date": start.isoformat(), "end_date": (start + timedelta(days=days - 1)).isoformat(), "api_key": api_key})
     request = Request(f"{NEOWS_URL}?{params}", headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-    with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
+    with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     days_payload = payload.get("near_earth_objects")
     if not isinstance(days_payload, dict):
