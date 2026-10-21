@@ -7,12 +7,11 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from ..core.http import USER_AGENT, tls_context
+from ..core.http import REQUEST_TIMEOUT_SECONDS, USER_AGENT, tls_context
 from ..core.parsing import optional_float
 from ..models.impact import Fireball
 
 FIREBALL_URL = "https://ssd-api.jpl.nasa.gov/fireball.api"
-TIMEOUT_SECONDS = 20
 
 
 def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
@@ -82,7 +81,7 @@ def _fetch_fireballs_cached(days: int, cache_window: int) -> list[Fireball]:
     start = datetime.now(timezone.utc).date() - timedelta(days=days)
     params = urlencode({"date-min": start.isoformat(), "vel-comp": "true", "sort": "-date"})
     request = Request(f"{FIREBALL_URL}?{params}", headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-    with urlopen(request, timeout=TIMEOUT_SECONDS, context=tls_context()) as response:
+    with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
     if not isinstance(payload, dict):
         # A non-object payload is malformed data, not an empty feed: surfacing
