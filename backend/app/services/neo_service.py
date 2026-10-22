@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from ..core.http import REQUEST_TIMEOUT_SECONDS, USER_AGENT, tls_context
-from ..core.parsing import optional_float
+from ..core.parsing import optional_float, optional_str
 from ..models.impact import NearEarthObject
 
 NEOWS_URL = "https://api.nasa.gov/neo/rest/v1/feed"
@@ -38,16 +38,16 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     return NearEarthObject(
         id=str(entry.get("id") or entry.get("neo_reference_id") or entry.get("name") or approach_date),
         name=str(entry.get("name") or "Unnamed object"),
-        nasaJplUrl=entry.get("nasa_jpl_url"),
+        nasaJplUrl=optional_str(entry.get("nasa_jpl_url")),
         estimatedDiameterMinKm=optional_float(diameter.get("estimated_diameter_min")),
         estimatedDiameterMaxKm=optional_float(diameter.get("estimated_diameter_max")),
         potentiallyHazardous=bool(entry.get("is_potentially_hazardous_asteroid", False)),
         closeApproachDate=approach_date,
-        closeApproachDateTime=approach.get("close_approach_date_full"),
+        closeApproachDateTime=optional_str(approach.get("close_approach_date_full")),
         relativeVelocityKmS=optional_float(velocity.get("kilometers_per_second")),
         missDistanceKm=optional_float(distance.get("kilometers")),
         missDistanceLunar=optional_float(distance.get("lunar")),
-        orbitingBody=approach.get("orbiting_body"),
+        orbitingBody=optional_str(approach.get("orbiting_body")),
     )
 
 
