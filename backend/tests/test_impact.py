@@ -242,3 +242,21 @@ def test_fireball_id_slug_ignores_offset_notation() -> None:
         assert item is not None
         ids.add(item.id)
     assert ids == {"2026-08-01T01-02-03-10.0-20.0"}
+
+
+def test_fireball_id_rounds_coordinates_to_three_decimals() -> None:
+    # Issue #60: the coordinate suffix in the id is a stable dedup key, so
+    # different float precisions of the same coordinates from the upstream
+    # feed must all produce the same id.
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    rows = [
+        ["2026-08-01 01:02:03", "38.128475", "N", "118.499999", "W", "30", "2.5", "0.1", "3", "4", "0"],
+        ["2026-08-01 01:02:03", "38.128", "N", "118.5", "W", "30", "2.5", "0.1", "3", "4", "0"],
+        ["2026-08-01 01:02:03", "38.1284750", "N", "118.4999990", "W", "30", "2.5", "0.1", "3", "4", "0"],
+    ]
+    ids = set()
+    for row in rows:
+        item = normalize_fireball(fields, row)
+        assert item is not None
+        ids.add(item.id)
+    assert ids == {"2026-08-01T01-02-03-38.128-118.5"}

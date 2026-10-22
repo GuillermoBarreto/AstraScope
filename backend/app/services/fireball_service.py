@@ -48,10 +48,14 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     # offset): CNEOS stamps are UTC, and a format change from a bare stamp to
     # a zoned one must not change the id for the same event.
     slug = re.sub(r"(?:Z|[+-]\d{2}:?\d{2})$", "", date_time, flags=re.IGNORECASE).replace(":", "-")
+    # Round the coordinate suffix to 3 decimals (~100 m) and use abs() so a
+    # negative latitude/longitude cannot render as a double dash
+    # ("--10.0--20.0"). The id is a stable dedup key: raw float precision from
+    # the upstream feed must not silently rewrite it when the formatting
+    # changes (#60).
+    coords = f"-{round(abs(latitude), 3)}-{round(abs(longitude), 3)}" if location else ""
     return Fireball(
-        # Use abs() for the coordinate suffix: a negative latitude/longitude
-        # would otherwise render as a double dash ("--10.0--20.0") in the id.
-        id=slug + (f"-{abs(latitude)}-{abs(longitude)}" if location else ""),
+        id=slug + coords,
         dateTime=date_time,
         latitude=latitude,
         longitude=longitude,

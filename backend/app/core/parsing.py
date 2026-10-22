@@ -17,3 +17,15 @@ def optional_float(value: Any) -> float | None:
     if result is not None and not math.isfinite(result):
         return None
     return result
+
+
+def optional_str(value: Any) -> str | None:
+    """Return ``value`` when it is a string, else None.
+
+    Upstream string fields sometimes arrive as null or a stray scalar; passing
+    those into a pydantic ``str`` field raises ValidationError (a ValueError,
+    which the API layer treats as an upstream failure) and drops the entire
+    feed for one malformed record. Treating them as absent keeps the record
+    alive instead.
+    """
+    return value if isinstance(value, str) else None
