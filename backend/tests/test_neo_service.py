@@ -97,3 +97,27 @@ def test_normalize_neo_tolerates_non_dict_nested_objects() -> None:
     assert item.estimatedDiameterMaxKm is None
     assert item.relativeVelocityKmS is None
     assert item.missDistanceKm is None
+
+
+def test_normalize_neo_coerces_non_string_fields_to_none() -> None:
+    # Non-string values in string fields must not escape as ValidationError
+    # and drop the whole feed: they are treated as absent and the record
+    # survives.
+    payload = _payload()
+    payload["nasa_jpl_url"] = ["not", "a", "url"]
+    approach = payload["close_approach_data"][0]
+    approach["orbiting_body"] = {"body": "Earth"}
+    approach["close_approach_date_full"] = 20260808
+    item = normalize_neo(payload)
+    assert item is not None
+    assert item.nasaJplUrl is None
+    assert item.orbitingBody is None
+    assert item.closeApproachDateTime is None
+
+
+def test_optional_str_keeps_strings_and_drops_other_types() -> None:
+    from backend.app.core.parsing import optional_str
+    assert optional_str("Earth") == "Earth"
+    assert optional_str(None) is None
+    assert optional_str(123) is None
+    assert optional_str(["x"]) is None
