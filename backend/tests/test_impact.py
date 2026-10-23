@@ -244,6 +244,18 @@ def test_fireball_id_slug_ignores_offset_notation() -> None:
     assert ids == {"2026-08-01T01-02-03-10.0-20.0"}
 
 
+def test_fireball_normalization_handles_bare_two_digit_offset() -> None:
+    # A bare two-digit offset ("+05") is a real ISO-8601 designator: stamping
+    # it with "Z" would produce a malformed "...+05Z". The designator must be
+    # left intact and must not leak into the stable id slug.
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    row = ["2026-08-01 01:02:03+05", "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"]
+    item = normalize_fireball(fields, row)
+    assert item is not None
+    assert item.dateTime == "2026-08-01T01:02:03+05"
+    assert item.id == "2026-08-01T01-02-03-10.0-20.0"
+
+
 def test_fireball_id_rounds_coordinates_to_three_decimals() -> None:
     # Issue #60: the coordinate suffix in the id is a stable dedup key, so
     # different float precisions of the same coordinates from the upstream
