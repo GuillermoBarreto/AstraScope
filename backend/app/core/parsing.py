@@ -8,8 +8,12 @@ def optional_float(value: Any) -> float | None:
     """Parse a value as float, returning None for missing, invalid, or non-finite values.
 
     NaN/inf would break JSON serialization and silently defeat numeric filters
-    (nan >= x is always False), so they are treated as invalid input.
+    (nan >= x is always False), so they are treated as invalid input. Booleans
+    are rejected too: float(True) is 1.0, so a JSON true in a numeric upstream
+    field would silently become 1.0 instead of being treated as malformed.
     """
+    if isinstance(value, bool):
+        return None
     try:
         result = float(value) if value not in (None, "") else None
     except (TypeError, ValueError):

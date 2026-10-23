@@ -12,6 +12,27 @@ def test_tls_context_is_built_once_and_reused() -> None:
     assert http.tls_context() is http.tls_context()
 
 
+def test_tls_context_init_is_thread_safe() -> None:
+    # FastAPI serves concurrent requests; every thread racing into
+    # tls_context() on a cold start must get back the same object instead of
+    # each building (and one discarding) a trust store.
+    import threading
+
+    sentinel = http._tls_context
+    http._tls_context = None
+    try:
+        results: list = []
+        threads = [threading.Thread(target=lambda: results.append(http.tls_context())) for _ in range(16)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert len(results) == 16
+        assert all(context is results[0] for context in results)
+    finally:
+        http._tls_context = sentinel
+
+
 def test_request_timeout_is_a_sane_positive_number() -> None:
     assert isinstance(http.REQUEST_TIMEOUT_SECONDS, (int, float))
     assert http.REQUEST_TIMEOUT_SECONDS > 0

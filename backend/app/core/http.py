@@ -1,4 +1,5 @@
 import ssl
+import threading
 
 import certifi
 import truststore
@@ -10,6 +11,7 @@ REQUEST_TIMEOUT_SECONDS = 20
 """One upstream request timeout shared by every fetcher (both services had drifted to their own copy of 20)."""
 
 _tls_context: ssl.SSLContext | None = None
+_tls_context_lock = threading.Lock()
 
 
 def tls_context() -> ssl.SSLContext:
@@ -17,12 +19,16 @@ def tls_context() -> ssl.SSLContext:
 
     The context is built once and reused: every upstream fetcher used to
     construct a fresh SSLContext per request, which rebuilds the trust store
-    each time.
+    each time. The lazy init is guarded by a lock because FastAPI serves
+    concurrent requests, and two threads racing past the None check would
+    otherwise each build (and one discard) a trust store on a cold start.
     """
     global _tls_context
     if _tls_context is None:
-        try:
-            _tls_context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        except (ImportError, NotImplementedError):
-            _tls_context = ssl.create_default_context(cafile=certifi.where())
+        with _tls_context_lock:
+            if _tls_context is None:
+                try:
+                    _tls_context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                except (ImportError, NotImplementedError):
+                    _tls_context = ssl.create_default_context(cafile=certifi.where())
     return _tls_context
