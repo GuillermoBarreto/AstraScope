@@ -13,6 +13,13 @@ from ..models.impact import Fireball
 
 FIREBALL_URL = "https://ssd-api.jpl.nasa.gov/fireball.api"
 
+# Trailing timezone designator on an upstream timestamp: "Z" or a numeric
+# offset with an optional colon and an optional minute component ("+00:00",
+# "+0000", "+05"). One compiled pattern shared by normalize_fireball's
+# Z-append check and its id-slug strip, so the two can never drift apart and
+# leak a designator into a stable dedup id.
+TZ_SUFFIX = re.compile(r"(?:Z|[+-]\d{2}(?::?\d{2})?)$", re.IGNORECASE)
+
 
 def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     record = dict(zip(fields, row))
@@ -24,9 +31,10 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     # CNEOS usually returns bare "YYYY-MM-DD HH:MM:SS" stamps, but only stamp
     # the value as UTC when it carries no timezone designator: blindly
     # appending "Z" to an already-zoned timestamp would produce malformed ISO
-    # like "...ZZ" or a doubled offset.
+    # like "...ZZ" or "...+05Z" (a bare two-digit offset is a real ISO-8601
+    # designator, so TZ_SUFFIX deliberately matches it too).
     date_time = str(timestamp).replace(" ", "T")
-    if not re.search(r"(?:Z|[+-]\d{2}:?\d{2})$", date_time, re.IGNORECASE):
+    if not TZ_SUFFIX.search(date_time):
         date_time += "Z"
     latitude = optional_float(record.get("lat"))
     longitude = optional_float(record.get("lon"))
@@ -44,10 +52,11 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     # timestamp: a zoned upstream stamp ("...+00:00" or "...Z") would otherwise
     # leak its designator into the id while dateTime is normalized separately,
     # so ids silently drift whenever the upstream format changes.
-    # Strip any timezone designator (a trailing "Z" or a numeric ±HH:MM/±HHMM
-    # offset): CNEOS stamps are UTC, and a format change from a bare stamp to
-    # a zoned one must not change the id for the same event.
-    slug = re.sub(r"(?:Z|[+-]\d{2}:?\d{2})$", "", date_time, flags=re.IGNORECASE).replace(":", "-")
+    # Strip the timezone designator with the same shared pattern used above:
+    # a designator that survived the Z-append check (any of the TZ_SUFFIX
+    # forms) must never leak into the id while dateTime is normalized
+    # separately, or ids silently drift whenever the upstream format changes.
+    slug = TZ_SUFFIX.sub("", date_time).replace(":", "-")
     # Round the coordinate suffix to 3 decimals (~100 m) and use abs() so a
     # negative latitude/longitude cannot render as a double dash
     # ("--10.0--20.0"). The id is a stable dedup key: raw float precision from
