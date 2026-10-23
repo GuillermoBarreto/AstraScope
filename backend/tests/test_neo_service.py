@@ -121,3 +121,18 @@ def test_optional_str_keeps_strings_and_drops_other_types() -> None:
     assert optional_str(None) is None
     assert optional_str(123) is None
     assert optional_str(["x"]) is None
+
+
+def test_optional_float_rejects_booleans() -> None:
+    # float(True) is 1.0, so without an explicit guard a JSON true in a
+    # numeric upstream field would silently parse as 1.0 instead of being
+    # treated as malformed input.
+    from backend.app.core.parsing import optional_float
+    assert optional_float(True) is None
+    assert optional_float(False) is None
+    assert optional_float("2.5") == 2.5
+    assert optional_float(0) == 0.0
+    assert optional_float(None) is None
+    assert optional_float("") is None
+    assert optional_float("nan") is None
+    assert optional_float(float("inf")) is None
