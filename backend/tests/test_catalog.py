@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import time
+from urllib.error import URLError
 
 import pytest
 
@@ -422,3 +423,91 @@ def test_retry_gate_serves_stale_cache_when_satnogs_also_fails(monkeypatch) -> N
     assert response["source"] == "stale-cache"
     assert response["error"] == "Orbital catalog providers are temporarily unavailable"
     assert response["total"] == 1
+
+
+def test_providers_reports_satnogs_last_success(monkeypatch) -> None:
+    # Issue #54: when the disk cache was written by the SatNOGS fallback, the
+    # providers endpoint must surface its lastSuccess instead of omitting it.
+    stamp = "2026-10-23T12:00:00+00:00"
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], stamp, "satnogs")
+    )
+    monkeypatch.setattr(main, "read_public_catalog_cache", lambda: None)
+
+    status = main.catalog_provider_status()
+
+    assert status["satnogs"]["lastSuccess"] == stamp
+
+
+def test_providers_satnogs_last_success_none_for_other_upstreams(monkeypatch) -> None:
+    stamp = "2026-10-23T12:00:00+00:00"
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], stamp, "spacetrack")
+    )
+    monkeypatch.setattr(main, "read_public_catalog_cache", lambda: None)
+
+    status = main.catalog_provider_status()
+
+    assert status["satnogs"]["lastSuccess"] is None
+    assert status["spaceTrack"]["lastSuccess"] == stamp
+
+
+def test_catalog_orbits_does_not_trip_satellites_retry_gate(monkeypatch) -> None:
+    # Issue #49: catalog_orbits fans out through list_satellites' fetch path,
+    # so a failed upstream sync there must not arm the /satellites retry gate.
+    monkeypatch.setattr(main, "read_disk_cache", lambda: None)
+    monkeypatch.setattr(main, "last_failure_at", 0.0)
+
+    def fail_primary(_cache_window: int):
+        raise URLError("primary down")
+
+    def fail_satnogs(_cache_window: int):
+        raise ValueError("SatNOGS down")
+
+    monkeypatch.setattr(main, "fetch_primary_catalog", fail_primary)
+    monkeypatch.setattr(main, "fetch_satnogs_catalog", fail_satnogs)
+    monkeypatch.setattr(main, "public_catalog", lambda: ([], "now", "cache", None))
+
+    body = main.catalog_orbits()
+
+    assert body["objects"] == []
+    assert main.last_failure_at == 0.0
+
+
+def test_satellites_endpoint_still_trips_retry_gate(monkeypatch) -> None:
+    # Control for the #49 fix: the public /satellites endpoint still records
+    # its own failures in the retry gate.
+    monkeypatch.setattr(main, "read_disk_cache", lambda: None)
+    monkeypatch.setattr(main, "last_failure_at", 0.0)
+
+    def fail_primary(_cache_window: int):
+        raise URLError("primary down")
+
+    def fail_satnogs(_cache_window: int):
+        raise ValueError("SatNOGS down")
+
+    monkeypatch.setattr(main, "fetch_primary_catalog", fail_primary)
+    monkeypatch.setattr(main, "fetch_satnogs_catalog", fail_satnogs)
+
+    response = main.list_satellites(operator=None, orbit=None, search=None)
+
+    assert response["source"] == "unavailable"
+    assert main.last_failure_at > 0.0
+
+
+def test_tle_scientific_parses_implied_decimal_exponent() -> None:
+    assert main._tle_scientific(" 12183-3") == pytest.approx(1.2183e-4)
+    assert main._tle_scientific(" 00000-0") == 0.0
+    assert main._tle_scientific("-11606-4") == pytest.approx(-1.1606e-5)
+    assert main._tle_scientific("        ") == 0.0
+    with pytest.raises(ValueError, match="Invalid SatNOGS TLE record"):
+        main._tle_scientific("not-a-field")
+
+
+def test_normalize_satnogs_parses_tle_drag_terms() -> None:
+    # SatNOGS TLE line 1 carries real drag terms; they must not be
+    # hardcoded to 0 like before.
+    satellite = normalize_satnogs(ISS)
+    assert satellite["bstar"] == pytest.approx(1.2183e-4)
+    assert satellite["meanMotionDot"] == pytest.approx(6.342e-5)
+    assert satellite["meanMotionDdot"] == 0.0

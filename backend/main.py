@@ -244,6 +244,25 @@ def _tle_float(text: str) -> float:
         raise ValueError("Invalid SatNOGS TLE record") from exc
 
 
+def _tle_scientific(text: str) -> float:
+    """Parse a TLE implied-decimal scientific field, e.g. " 12183-3" -> 1.2183e-4.
+
+    TLE drag-term fields (second derivative of mean motion, BSTAR) carry no
+    decimal point: the mantissa implies a leading "0." and the last two
+    characters are the exponent. An all-blank field means the provider left
+    it unset, which parses as 0.0.
+    """
+    field = text.strip()
+    if not field:
+        return 0.0
+    sign = -1.0 if field.startswith("-") else 1.0
+    digits = field.lstrip("+-")
+    try:
+        return sign * float(f"0.{digits[:-2]}") * (10.0 ** int(digits[-2:]))
+    except (ValueError, IndexError) as exc:
+        raise ValueError("Invalid SatNOGS TLE record") from exc
+
+
 # Two-digit-year pivot for TLE epoch and international-designator fields: a
 # year below 57 belongs to the 2000s, 57 and above to the 1900s. Kept in one
 # place so tle_epoch and tle_object_id can never drift apart.
@@ -288,9 +307,11 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
         "argPericenter": _tle_float(line2[34:42]),
         "meanAnomaly": _tle_float(line2[43:51]),
         "meanMotion": mean_motion,
-        "bstar": 0,
-        "meanMotionDot": 0,
-        "meanMotionDdot": 0,
+        # TLE line 1 carries the real drag terms (cols 34-43, 45-52, 54-61);
+        # defaulting them to 0 made SatNOGS records report no drag at all.
+        "bstar": _tle_scientific(line1[53:61]),
+        "meanMotionDot": _tle_float(line1[33:43].strip() or "0"),
+        "meanMotionDdot": _tle_scientific(line1[44:52]),
         "elementSetNo": _tle_int(line1[64:68].strip() or "0"),
         "tle1": line1,
         "tle2": line2,
@@ -539,13 +560,21 @@ def fetch_primary_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str,
     raise ValueError("; ".join(errors))
 
 
-@app.get("/satellites")
-@app.get("/api/satellites")
-def list_satellites(
-    operator: str | None = Query(default=None),
-    orbit: str | None = Query(default=None),
-    search: str | None = Query(default=None, max_length=80),
+def _list_satellites_impl(
+    operator: str | None,
+    orbit: str | None,
+    search: str | None,
+    *,
+    record_failure: bool,
 ) -> dict[str, Any]:
+    """Shared /satellites fetch path behind the public endpoint.
+
+    ``record_failure`` decides whether an upstream failure arms the 5-minute
+    retry gate (module-global ``last_failure_at`` / ``last_failure_error``):
+    the public endpoint records it, but internal fan-out callers such as
+    catalog_orbits must not (#49) — one endpoint's failed sync should not
+    suppress another endpoint's feed.
+    """
     global last_failure_at, last_failure_error
     preferred_upstream = "spacetrack" if settings.has_space_track_credentials() else "celestrak"
     source = preferred_upstream
@@ -594,8 +623,12 @@ def list_satellites(
     except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         logger.warning("Primary orbital catalog unavailable (%s): %s", type(exc).__name__, exc)
         error = "Orbital catalog providers are temporarily unavailable"
-        last_failure_at = time.time()
-        last_failure_error = error
+        if record_failure:
+            # The retry gate is shared module state: only the endpoint that
+            # owns it may arm it, so a failing internal fan-out cannot
+            # suppress the public /satellites feed (#49).
+            last_failure_at = time.time()
+            last_failure_error = error
         if cached:
             satellites, updated_at, upstream = cached
             source = "stale-cache"
@@ -634,6 +667,16 @@ def list_satellites(
         "scope": "tracked" if upstream == "spacetrack" else "active",
         "error": error,
     }
+
+
+@app.get("/satellites")
+@app.get("/api/satellites")
+def list_satellites(
+    operator: str | None = Query(default=None),
+    orbit: str | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=80),
+) -> dict[str, Any]:
+    return _list_satellites_impl(operator, orbit, search, record_failure=True)
 
 
 def filter_catalog_objects(
@@ -769,7 +812,7 @@ def catalog_orbits(
     debris: bool = Query(default=False),
     rocket_bodies: bool = Query(default=False),
 ) -> dict[str, Any]:
-    response = list_satellites()
+    response = _list_satellites_impl(None, None, None, record_failure=False)
     records = response["satellites"]
     if mode == "active":
         # GP/orbital records carry no OPS_STATUS_CODE column, so their
@@ -823,7 +866,14 @@ def catalog_provider_status() -> dict[str, Any]:
             "status": "healthy" if orbital_cache or metadata_cache else "not-synced",
             "lastSuccess": max([value for value in (orbital_cache[1] if orbital_cache else None, metadata_cache[1] if metadata_cache else None) if value], default=None),
         },
-        "satnogs": {"configured": True, "status": "fallback"},
+        "satnogs": {
+            "configured": True,
+            "status": "fallback",
+            # The fallback writes the disk cache with upstream="satnogs" when
+            # it serves live data, so report its last success like the other
+            # providers instead of omitting it (#54).
+            "lastSuccess": orbital_cache[1] if orbital_cache and orbital_cache[2] == "satnogs" else None,
+        },
         "discos": {
             "configured": settings.has_discos_credentials(),
             "status": "available-on-demand" if settings.has_discos_credentials() else "disabled",
