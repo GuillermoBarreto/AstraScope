@@ -49,13 +49,10 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     velocity = math.sqrt(sum(value * value for value in components)) if all(value is not None for value in components) else None
     location = f"{abs(latitude):.1f}° {'N' if latitude >= 0 else 'S'}, {abs(longitude):.1f}° {'E' if longitude >= 0 else 'W'}" if latitude is not None and longitude is not None else None
     # Build the id from the already-normalized date_time, not the raw
-    # timestamp: a zoned upstream stamp ("...+00:00" or "...Z") would otherwise
-    # leak its designator into the id while dateTime is normalized separately,
-    # so ids silently drift whenever the upstream format changes.
-    # Strip the timezone designator with the same shared pattern used above:
-    # a designator that survived the Z-append check (any of the TZ_SUFFIX
-    # forms) must never leak into the id while dateTime is normalized
-    # separately, or ids silently drift whenever the upstream format changes.
+    # timestamp, and strip the timezone designator with the same shared
+    # TZ_SUFFIX pattern used for the Z-append check above: a designator that
+    # survived that check (any TZ_SUFFIX form) must never leak into the id,
+    # or ids silently drift whenever the upstream format changes.
     slug = TZ_SUFFIX.sub("", date_time).replace(":", "-")
     # Round the coordinate suffix to 3 decimals (~100 m) and use abs() so a
     # negative latitude/longitude cannot render as a double dash
