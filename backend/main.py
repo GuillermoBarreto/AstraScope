@@ -823,7 +823,14 @@ def catalog_provider_status() -> dict[str, Any]:
             "status": "healthy" if orbital_cache or metadata_cache else "not-synced",
             "lastSuccess": max([value for value in (orbital_cache[1] if orbital_cache else None, metadata_cache[1] if metadata_cache else None) if value], default=None),
         },
-        "satnogs": {"configured": True, "status": "fallback"},
+        "satnogs": {
+            "configured": True,
+            "status": "fallback",
+            # The fallback writes the disk cache with upstream="satnogs" when
+            # it serves live data, so report its last success like the other
+            # providers instead of omitting it (#54).
+            "lastSuccess": orbital_cache[1] if orbital_cache and orbital_cache[2] == "satnogs" else None,
+        },
         "discos": {
             "configured": settings.has_discos_credentials(),
             "status": "available-on-demand" if settings.has_discos_credentials() else "disabled",

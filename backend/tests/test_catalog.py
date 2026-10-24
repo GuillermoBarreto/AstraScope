@@ -422,3 +422,30 @@ def test_retry_gate_serves_stale_cache_when_satnogs_also_fails(monkeypatch) -> N
     assert response["source"] == "stale-cache"
     assert response["error"] == "Orbital catalog providers are temporarily unavailable"
     assert response["total"] == 1
+
+
+def test_providers_reports_satnogs_last_success(monkeypatch) -> None:
+    # Issue #54: when the disk cache was written by the SatNOGS fallback, the
+    # providers endpoint must surface its lastSuccess instead of omitting it.
+    stamp = "2026-10-23T12:00:00+00:00"
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], stamp, "satnogs")
+    )
+    monkeypatch.setattr(main, "read_public_catalog_cache", lambda: None)
+
+    status = main.catalog_provider_status()
+
+    assert status["satnogs"]["lastSuccess"] == stamp
+
+
+def test_providers_satnogs_last_success_none_for_other_upstreams(monkeypatch) -> None:
+    stamp = "2026-10-23T12:00:00+00:00"
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], stamp, "spacetrack")
+    )
+    monkeypatch.setattr(main, "read_public_catalog_cache", lambda: None)
+
+    status = main.catalog_provider_status()
+
+    assert status["satnogs"]["lastSuccess"] is None
+    assert status["spaceTrack"]["lastSuccess"] == stamp
