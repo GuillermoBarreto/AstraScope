@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import time
+from urllib.error import URLError
 
 import pytest
 
