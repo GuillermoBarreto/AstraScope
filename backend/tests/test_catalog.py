@@ -449,3 +449,46 @@ def test_providers_satnogs_last_success_none_for_other_upstreams(monkeypatch) ->
 
     assert status["satnogs"]["lastSuccess"] is None
     assert status["spaceTrack"]["lastSuccess"] == stamp
+
+
+def test_catalog_orbits_does_not_trip_satellites_retry_gate(monkeypatch) -> None:
+    # Issue #49: catalog_orbits fans out through list_satellites' fetch path,
+    # so a failed upstream sync there must not arm the /satellites retry gate.
+    monkeypatch.setattr(main, "read_disk_cache", lambda: None)
+    monkeypatch.setattr(main, "last_failure_at", 0.0)
+
+    def fail_primary(_cache_window: int):
+        raise URLError("primary down")
+
+    def fail_satnogs(_cache_window: int):
+        raise ValueError("SatNOGS down")
+
+    monkeypatch.setattr(main, "fetch_primary_catalog", fail_primary)
+    monkeypatch.setattr(main, "fetch_satnogs_catalog", fail_satnogs)
+    monkeypatch.setattr(main, "public_catalog", lambda: ([], "now", "cache", None))
+
+    body = main.catalog_orbits()
+
+    assert body["objects"] == []
+    assert main.last_failure_at == 0.0
+
+
+def test_satellites_endpoint_still_trips_retry_gate(monkeypatch) -> None:
+    # Control for the #49 fix: the public /satellites endpoint still records
+    # its own failures in the retry gate.
+    monkeypatch.setattr(main, "read_disk_cache", lambda: None)
+    monkeypatch.setattr(main, "last_failure_at", 0.0)
+
+    def fail_primary(_cache_window: int):
+        raise URLError("primary down")
+
+    def fail_satnogs(_cache_window: int):
+        raise ValueError("SatNOGS down")
+
+    monkeypatch.setattr(main, "fetch_primary_catalog", fail_primary)
+    monkeypatch.setattr(main, "fetch_satnogs_catalog", fail_satnogs)
+
+    response = main.list_satellites(operator=None, orbit=None, search=None)
+
+    assert response["source"] == "unavailable"
+    assert main.last_failure_at > 0.0

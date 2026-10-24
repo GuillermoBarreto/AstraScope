@@ -539,13 +539,21 @@ def fetch_primary_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str,
     raise ValueError("; ".join(errors))
 
 
-@app.get("/satellites")
-@app.get("/api/satellites")
-def list_satellites(
-    operator: str | None = Query(default=None),
-    orbit: str | None = Query(default=None),
-    search: str | None = Query(default=None, max_length=80),
+def _list_satellites_impl(
+    operator: str | None,
+    orbit: str | None,
+    search: str | None,
+    *,
+    record_failure: bool,
 ) -> dict[str, Any]:
+    """Shared /satellites fetch path behind the public endpoint.
+
+    ``record_failure`` decides whether an upstream failure arms the 5-minute
+    retry gate (module-global ``last_failure_at`` / ``last_failure_error``):
+    the public endpoint records it, but internal fan-out callers such as
+    catalog_orbits must not (#49) — one endpoint's failed sync should not
+    suppress another endpoint's feed.
+    """
     global last_failure_at, last_failure_error
     preferred_upstream = "spacetrack" if settings.has_space_track_credentials() else "celestrak"
     source = preferred_upstream
@@ -594,8 +602,12 @@ def list_satellites(
     except (URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError) as exc:
         logger.warning("Primary orbital catalog unavailable (%s): %s", type(exc).__name__, exc)
         error = "Orbital catalog providers are temporarily unavailable"
-        last_failure_at = time.time()
-        last_failure_error = error
+        if record_failure:
+            # The retry gate is shared module state: only the endpoint that
+            # owns it may arm it, so a failing internal fan-out cannot
+            # suppress the public /satellites feed (#49).
+            last_failure_at = time.time()
+            last_failure_error = error
         if cached:
             satellites, updated_at, upstream = cached
             source = "stale-cache"
@@ -634,6 +646,16 @@ def list_satellites(
         "scope": "tracked" if upstream == "spacetrack" else "active",
         "error": error,
     }
+
+
+@app.get("/satellites")
+@app.get("/api/satellites")
+def list_satellites(
+    operator: str | None = Query(default=None),
+    orbit: str | None = Query(default=None),
+    search: str | None = Query(default=None, max_length=80),
+) -> dict[str, Any]:
+    return _list_satellites_impl(operator, orbit, search, record_failure=True)
 
 
 def filter_catalog_objects(
@@ -769,7 +791,7 @@ def catalog_orbits(
     debris: bool = Query(default=False),
     rocket_bodies: bool = Query(default=False),
 ) -> dict[str, Any]:
-    response = list_satellites()
+    response = _list_satellites_impl(None, None, None, record_failure=False)
     records = response["satellites"]
     if mode == "active":
         # GP/orbital records carry no OPS_STATUS_CODE column, so their
