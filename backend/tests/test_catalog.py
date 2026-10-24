@@ -492,3 +492,21 @@ def test_satellites_endpoint_still_trips_retry_gate(monkeypatch) -> None:
 
     assert response["source"] == "unavailable"
     assert main.last_failure_at > 0.0
+
+
+def test_tle_scientific_parses_implied_decimal_exponent() -> None:
+    assert main._tle_scientific(" 12183-3") == pytest.approx(1.2183e-4)
+    assert main._tle_scientific(" 00000-0") == 0.0
+    assert main._tle_scientific("-11606-4") == pytest.approx(-1.1606e-5)
+    assert main._tle_scientific("        ") == 0.0
+    with pytest.raises(ValueError, match="Invalid SatNOGS TLE record"):
+        main._tle_scientific("not-a-field")
+
+
+def test_normalize_satnogs_parses_tle_drag_terms() -> None:
+    # SatNOGS TLE line 1 carries real drag terms; they must not be
+    # hardcoded to 0 like before.
+    satellite = normalize_satnogs(ISS)
+    assert satellite["bstar"] == pytest.approx(1.2183e-4)
+    assert satellite["meanMotionDot"] == pytest.approx(6.342e-5)
+    assert satellite["meanMotionDdot"] == 0.0

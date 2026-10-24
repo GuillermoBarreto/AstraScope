@@ -244,6 +244,25 @@ def _tle_float(text: str) -> float:
         raise ValueError("Invalid SatNOGS TLE record") from exc
 
 
+def _tle_scientific(text: str) -> float:
+    """Parse a TLE implied-decimal scientific field, e.g. " 12183-3" -> 1.2183e-4.
+
+    TLE drag-term fields (second derivative of mean motion, BSTAR) carry no
+    decimal point: the mantissa implies a leading "0." and the last two
+    characters are the exponent. An all-blank field means the provider left
+    it unset, which parses as 0.0.
+    """
+    field = text.strip()
+    if not field:
+        return 0.0
+    sign = -1.0 if field.startswith("-") else 1.0
+    digits = field.lstrip("+-")
+    try:
+        return sign * float(f"0.{digits[:-2]}") * (10.0 ** int(digits[-2:]))
+    except (ValueError, IndexError) as exc:
+        raise ValueError("Invalid SatNOGS TLE record") from exc
+
+
 # Two-digit-year pivot for TLE epoch and international-designator fields: a
 # year below 57 belongs to the 2000s, 57 and above to the 1900s. Kept in one
 # place so tle_epoch and tle_object_id can never drift apart.
@@ -288,9 +307,11 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
         "argPericenter": _tle_float(line2[34:42]),
         "meanAnomaly": _tle_float(line2[43:51]),
         "meanMotion": mean_motion,
-        "bstar": 0,
-        "meanMotionDot": 0,
-        "meanMotionDdot": 0,
+        # TLE line 1 carries the real drag terms (cols 34-43, 45-52, 54-61);
+        # defaulting them to 0 made SatNOGS records report no drag at all.
+        "bstar": _tle_scientific(line1[53:61]),
+        "meanMotionDot": _tle_float(line1[33:43].strip() or "0"),
+        "meanMotionDdot": _tle_scientific(line1[44:52]),
         "elementSetNo": _tle_int(line1[64:68].strip() or "0"),
         "tle1": line1,
         "tle2": line2,
