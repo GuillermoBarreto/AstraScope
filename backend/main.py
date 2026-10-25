@@ -464,6 +464,8 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
             satellites.append(normalize(item, "celestrak-gp"))
         except (ValueError, TypeError):
             continue
+    if not satellites:
+        raise ValueError("CelesTrak returned no valid orbital records")
     updated_at = datetime.now(timezone.utc).isoformat()
     write_disk_cache(satellites, updated_at, "celestrak")
     return satellites, updated_at
