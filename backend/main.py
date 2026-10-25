@@ -289,7 +289,7 @@ def tle_object_id(value: str) -> str:
 def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
     line1 = str(entry.get("tle1", ""))
     line2 = str(entry.get("tle2", ""))
-    if len(line1) < 32 or len(line2) < 63:
+    if len(line1) < 69 or len(line2) < 63:
         raise ValueError("Invalid SatNOGS TLE record")
     name = str(entry.get("tle0", "Unknown satellite")).removeprefix("0 ").strip()
     norad_id = _tle_int(str(entry.get("norad_cat_id") or line1[2:7]))
