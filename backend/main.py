@@ -336,7 +336,7 @@ def read_disk_cache() -> tuple[list[dict[str, Any]], str, str] | None:
         satellites = cached.get("satellites")
         updated_at = cached.get("updatedAt")
         upstream = cached.get("upstream")
-        if isinstance(satellites, list) and isinstance(updated_at, str) and upstream in {"celestrak", "spacetrack", "satnogs"}:
+        if isinstance(satellites, list) and all(isinstance(item, dict) for item in satellites) and isinstance(updated_at, str) and upstream in {"celestrak", "spacetrack", "satnogs"}:
             return satellites, updated_at, upstream
     except (OSError, json.JSONDecodeError, AttributeError):
         pass
