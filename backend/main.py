@@ -289,7 +289,7 @@ def tle_object_id(value: str) -> str:
 def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
     line1 = str(entry.get("tle1", ""))
     line2 = str(entry.get("tle2", ""))
-    if len(line1) < 32 or len(line2) < 63:
+    if len(line1) < 69 or len(line2) < 63:
         raise ValueError("Invalid SatNOGS TLE record")
     name = str(entry.get("tle0", "Unknown satellite")).removeprefix("0 ").strip()
     norad_id = _tle_int(str(entry.get("norad_cat_id") or line1[2:7]))
@@ -336,7 +336,7 @@ def read_disk_cache() -> tuple[list[dict[str, Any]], str, str] | None:
         satellites = cached.get("satellites")
         updated_at = cached.get("updatedAt")
         upstream = cached.get("upstream")
-        if isinstance(satellites, list) and isinstance(updated_at, str) and upstream in {"celestrak", "spacetrack", "satnogs"}:
+        if isinstance(satellites, list) and all(isinstance(item, dict) for item in satellites) and isinstance(updated_at, str) and upstream in {"celestrak", "spacetrack", "satnogs"}:
             return satellites, updated_at, upstream
     except (OSError, json.JSONDecodeError, AttributeError):
         pass
@@ -464,6 +464,8 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
             satellites.append(normalize(item, "celestrak-gp"))
         except (ValueError, TypeError):
             continue
+    if not satellites:
+        raise ValueError("CelesTrak returned no valid orbital records")
     updated_at = datetime.now(timezone.utc).isoformat()
     write_disk_cache(satellites, updated_at, "celestrak")
     return satellites, updated_at
