@@ -148,6 +148,15 @@ def test_public_catalog_persistent_fallback(tmp_path, monkeypatch) -> None:
     assert main.read_public_catalog_cache() == (expected, "2026-08-29T00:00:00+00:00")
 
 
+def test_public_catalog_cache_rejects_non_dict_entries(tmp_path, monkeypatch) -> None:
+    # A hand-seeded or corrupt cache with a non-dict entry must read as a
+    # miss, not hand the catalog endpoints a record they can't index.
+    cache_file = tmp_path / "public-catalog.json"
+    monkeypatch.setattr(main, "PUBLIC_CATALOG_CACHE_FILE", cache_file)
+    cache_file.write_text(json.dumps({"objects": [{"noradId": 25544}, "not-a-record"], "updatedAt": "2026-08-29T00:00:00+00:00"}), encoding="utf-8")
+    assert main.read_public_catalog_cache() is None
+
+
 def test_large_catalog_serialization_benchmark() -> None:
     fixture = [normalize_satcat(satcat_record(NORAD_CAT_ID=str(index + 1), OBJECT_NAME=f"OBJECT {index}")) for index in range(35_000)]
     started = time.perf_counter()
