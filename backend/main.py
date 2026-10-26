@@ -363,7 +363,10 @@ def read_public_catalog_cache() -> tuple[list[dict[str, Any]], str] | None:
         cached = json.loads(PUBLIC_CATALOG_CACHE_FILE.read_text(encoding="utf-8"))
         objects = cached.get("objects")
         updated_at = cached.get("updatedAt")
-        if isinstance(objects, list) and isinstance(updated_at, str):
+        # A non-dict entry (hand-seeded or corrupt cache) would crash the
+        # catalog endpoints that index record keys, so treat it as a miss
+        # and let the caller re-sync instead of serving a 500.
+        if isinstance(objects, list) and all(isinstance(item, dict) for item in objects) and isinstance(updated_at, str):
             return objects, updated_at
     except (OSError, json.JSONDecodeError, AttributeError):
         pass
