@@ -89,6 +89,12 @@ def _fetch_neos_cached(days: int, key_fingerprint: str, cache_window: int) -> li
     request = Request(f"{NEOWS_URL}?{params}", headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS, context=tls_context()) as response:
         payload = json.load(response)
+    if not isinstance(payload, dict):
+        # Same guard the fireball fetcher has: a non-object payload is
+        # malformed data, and .get() on it would raise AttributeError,
+        # which impact.py does not catch, so it would escape as a 500
+        # for the whole feed instead of the structured upstream error.
+        raise ValueError("NASA NeoWs returned malformed data")
     days_payload = payload.get("near_earth_objects")
     if not isinstance(days_payload, dict):
         raise ValueError("NASA NeoWs returned malformed data")
