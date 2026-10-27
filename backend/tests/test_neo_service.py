@@ -82,6 +82,43 @@ def test_fetch_neos_detects_key_rotation(monkeypatch) -> None:
         neo_service._fetch_neos_cached.cache_clear()
 
 
+def test_fetch_neos_rejects_non_dict_payload(monkeypatch) -> None:
+    # A non-object NeoWs payload must surface as the structured upstream
+    # error, not escape as an AttributeError 500: payload.get() on a list
+    # is not one of the exceptions impact.py catches.
+    import backend.app.core.config as config_module
+    import json
+
+    class FakeSettings:
+        nasa_api_key = "test-key"
+
+    class FakeResponse:
+        def __init__(self, data):
+            self._data = data
+
+        def read(self):
+            return self._data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(config_module, "settings", FakeSettings())
+    monkeypatch.setattr(
+        neo_service,
+        "urlopen",
+        lambda *args, **kwargs: FakeResponse(json.dumps(["not", "a", "dict"]).encode()),
+    )
+    neo_service._fetch_neos_cached.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="malformed data"):
+            neo_service._fetch_neos_cached(7, neo_service._key_fingerprint("test-key"), 1)
+    finally:
+        neo_service._fetch_neos_cached.cache_clear()
+
+
 def test_normalize_neo_tolerates_non_dict_nested_objects() -> None:
     # A non-dict truthy value (stray scalar) in a nested object must be
     # treated like null: skipped, not an AttributeError escaping as an
