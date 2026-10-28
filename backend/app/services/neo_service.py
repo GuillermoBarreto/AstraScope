@@ -32,7 +32,7 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     diameter = _as_dict(_as_dict(entry.get("estimated_diameter")).get("kilometers"))
     velocity = _as_dict(approach.get("relative_velocity"))
     distance = _as_dict(approach.get("miss_distance"))
-    approach_date = str(approach.get("close_approach_date") or "")
+    approach_date = optional_str(approach.get("close_approach_date")) or ""
     if not approach_date:
         return None
     return NearEarthObject(

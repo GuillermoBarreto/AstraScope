@@ -104,11 +104,15 @@ def _fetch_fireballs_cached(days: int, cache_window: int) -> list[Fireball]:
         # A non-numeric count is malformed data, not a stray TypeError/ValueError
         # escaping as an unhandled 500: keep it a structured upstream error.
         raise ValueError("JPL Fireball API returned malformed data") from exc
-    if count == 0:
-        return []
     fields, rows = payload.get("fields"), payload.get("data")
     if not isinstance(fields, list) or not isinstance(rows, list):
+        # Validate the shape before the count==0 shortcut: a payload that
+        # claims zero events but carries malformed fields/data is malformed
+        # data, not a successful empty sync, and must surface as the
+        # structured upstream error instead of a quiet empty feed.
         raise ValueError("JPL Fireball API returned malformed data")
+    if count == 0:
+        return []
     events = [
         event
         for row in rows
