@@ -35,9 +35,15 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     approach_date = optional_str(approach.get("close_approach_date")) or ""
     if not approach_date:
         return None
+    # Issue #69, continued: close_approach_date went through optional_str
+    # earlier, but id/name still used str(), so a dict/list id or name
+    # became a "{...}" garbage string. Non-string values are absent here
+    # too, and the fallback chain runs on the cleaned values only.
+    raw_id = optional_str(entry.get("id")) or optional_str(entry.get("neo_reference_id"))
+    raw_name = optional_str(entry.get("name"))
     return NearEarthObject(
-        id=str(entry.get("id") or entry.get("neo_reference_id") or entry.get("name") or approach_date),
-        name=str(entry.get("name") or "Unnamed object"),
+        id=raw_id or raw_name or approach_date,
+        name=raw_name or "Unnamed object",
         nasaJplUrl=optional_str(entry.get("nasa_jpl_url")),
         estimatedDiameterMinKm=optional_float(diameter.get("estimated_diameter_min")),
         estimatedDiameterMaxKm=optional_float(diameter.get("estimated_diameter_max")),
