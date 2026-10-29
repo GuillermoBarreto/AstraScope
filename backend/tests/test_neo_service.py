@@ -173,3 +173,20 @@ def test_optional_float_rejects_booleans() -> None:
     assert optional_float("") is None
     assert optional_float("nan") is None
     assert optional_float(float("inf")) is None
+
+
+def test_normalize_neo_treats_non_string_id_and_name_as_absent() -> None:
+    # Issue #69, continued: a dict id / list name used to be str()-coerced
+    # into garbage ("{...}") instead of treated as absent, so the fallback
+    # chain never ran. Non-string ids fall back to the reference id, then
+    # the name, then the approach date; a non-string name falls back to
+    # "Unnamed object".
+    payload = _payload(id={"not": "an id"}, neo_reference_id=12345, name=["weird"])
+    item = normalize_neo(payload)
+    assert item is not None
+    assert item.id == "2026-08-08"
+    assert item.name == "Unnamed object"
+    payload = _payload(id=["nope"], neo_reference_id="ref-9", name="(2010 PK9)")
+    item = normalize_neo(payload)
+    assert item is not None
+    assert item.id == "ref-9"

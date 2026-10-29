@@ -26,14 +26,17 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     timestamp = record.get("date")
     energy = optional_float(record.get("energy"))
     impact_energy = optional_float(record.get("impact-e"))
-    if not timestamp or energy is None or impact_energy is None:
+    if not isinstance(timestamp, str) or not timestamp or energy is None or impact_energy is None:
         return None
+    # A numeric or dict date used to be str()-coerced into a garbage
+    # dateTime like "12345Z" with a matching garbage dedup id; a
+    # non-string date is malformed input, so the row is skipped instead.
     # CNEOS usually returns bare "YYYY-MM-DD HH:MM:SS" stamps, but only stamp
     # the value as UTC when it carries no timezone designator: blindly
     # appending "Z" to an already-zoned timestamp would produce malformed ISO
     # like "...ZZ" or "...+05Z" (a bare two-digit offset is a real ISO-8601
     # designator, so TZ_SUFFIX deliberately matches it too).
-    date_time = str(timestamp).replace(" ", "T")
+    date_time = timestamp.replace(" ", "T")
     if not TZ_SUFFIX.search(date_time):
         date_time += "Z"
     latitude = optional_float(record.get("lat"))
