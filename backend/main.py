@@ -152,7 +152,10 @@ def identify_purpose(name: str) -> str:
 
 
 def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict[str, Any]:
-    name = str(entry.get("OBJECT_NAME", "Unknown satellite"))
+    # The missing-key defaults below used to be bypassed by an explicit
+    # null: str(None) is the literal "None", so a null OBJECT_NAME
+    # produced a satellite literally named "None".
+    name = str(entry.get("OBJECT_NAME") or "Unknown satellite")
     norad_id = int(entry.get("NORAD_CAT_ID") or 0)
     # A missing/zero mean motion must not fall through to 1.0: orbit_class()
     # maps 1.0 to GEO, which would mislabel records with no orbital data.
@@ -163,8 +166,8 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
         "id": f"{slug}-{norad_id}",
         "name": name,
         "noradId": norad_id,
-        "objectId": str(entry.get("OBJECT_ID", "unknown")),
-        "epoch": str(entry.get("EPOCH", "")),
+        "objectId": str(entry.get("OBJECT_ID") or "unknown"),
+        "epoch": str(entry.get("EPOCH") or ""),
         "inclination": float(entry.get("INCLINATION") or 0),
         "raan": float(entry.get("RA_OF_ASC_NODE") or 0),
         "eccentricity": float(entry.get("ECCENTRICITY") or 0),
@@ -178,12 +181,12 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
         "operator": identify_operator(name),
         "orbit": orbit_class(mean_motion),
         "purpose": identify_purpose(name),
-        "countryCode": str(entry.get("COUNTRY_CODE", "Unknown")),
+        "countryCode": str(entry.get("COUNTRY_CODE") or "Unknown"),
         "internationalDesignator": str(entry.get("OBJECT_ID") or "") or None,
         "objectType": object_type(entry.get("OBJECT_TYPE", "PAYLOAD")),
         "operationalStatus": operational_status(entry.get("OPS_STATUS_CODE"), entry.get("DECAY_DATE")),
         "hasOrbitalData": True,
-        "orbitalDataUpdatedAt": str(entry.get("EPOCH", "")),
+        "orbitalDataUpdatedAt": str(entry.get("EPOCH") or ""),
         "dataSources": {"orbit": orbit_source},
         "dataQuality": "provider-supplied",
     })
