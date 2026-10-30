@@ -520,3 +520,23 @@ def test_normalize_satnogs_parses_tle_drag_terms() -> None:
     assert satellite["bstar"] == pytest.approx(1.2183e-4)
     assert satellite["meanMotionDot"] == pytest.approx(6.342e-5)
     assert satellite["meanMotionDdot"] == 0.0
+
+
+def test_gp_normalization_null_fields_use_fallbacks_not_none_string() -> None:
+    # An explicit null used to bypass the missing-key defaults, so a
+    # record with OBJECT_NAME null was literally named "None".
+    item = normalize({
+        "OBJECT_NAME": None,
+        "OBJECT_ID": None,
+        "NORAD_CAT_ID": 25544,
+        "EPOCH": None,
+        "COUNTRY_CODE": None,
+        "MEAN_MOTION": 15.5,
+        "OBJECT_TYPE": "PAYLOAD",
+    })
+    assert item["name"] == "Unknown satellite"
+    assert item["objectId"] == "unknown"
+    assert item["epoch"] == ""
+    assert item["countryCode"] == "Unknown"
+    assert item["orbitalDataUpdatedAt"] == ""
+    assert "None" not in item["id"]
