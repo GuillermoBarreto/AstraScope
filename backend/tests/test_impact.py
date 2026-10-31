@@ -272,3 +272,14 @@ def test_fireball_id_rounds_coordinates_to_three_decimals() -> None:
         assert item is not None
         ids.add(item.id)
     assert ids == {"2026-08-01T01-02-03-38.128-118.5"}
+
+
+def test_fireball_normalization_tolerates_flag_case_and_whitespace() -> None:
+    # Direction flags arrive in whatever case/whitespace the feed used;
+    # a lowercase "s" or padded " W " used to be compared raw and silently
+    # dropped, plotting the event in the wrong hemisphere.
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    item = normalize_fireball(fields, ["2026-08-01 01:02:03", "10", " s ", "20", "w", "30", "2.5", "0.1", "3", "4", "0"])
+    assert item is not None
+    assert item.latitude == -10
+    assert item.longitude == -20

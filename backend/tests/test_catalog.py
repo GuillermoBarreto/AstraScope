@@ -540,3 +540,24 @@ def test_gp_normalization_null_fields_use_fallbacks_not_none_string() -> None:
     assert item["countryCode"] == "Unknown"
     assert item["orbitalDataUpdatedAt"] == ""
     assert "None" not in item["id"]
+
+
+def test_normalize_rejects_non_finite_and_garbage_floats() -> None:
+    # Issue #73: normalize() called float() directly, so "inf"/"nan"
+    # sailed into the catalog (breaking JSON output and numeric filters)
+    # and a garbage string raised ValueError and dropped the record.
+    # All three now mean "no data" and fall back to 0.
+    item = normalize({
+        "OBJECT_NAME": "BAD FLOATS",
+        "OBJECT_ID": "2026-001A",
+        "NORAD_CAT_ID": 100001,
+        "MEAN_MOTION": "inf",
+        "INCLINATION": "nan",
+        "ECCENTRICITY": "not-a-number",
+        "BSTAR": "1e999",
+    })
+    assert item["meanMotion"] == 0
+    assert item["inclination"] == 0
+    assert item["eccentricity"] == 0
+    assert item["bstar"] == 0
+    assert item["orbit"] == "OTHER"

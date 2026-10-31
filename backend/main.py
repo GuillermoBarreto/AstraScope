@@ -151,6 +151,19 @@ def identify_purpose(name: str) -> str:
     return next((purpose for purpose, tokens in patterns if any(token in upper for token in tokens)), "Other")
 
 
+def _gp_float(value: Any) -> float:
+    """Finite float for a GP numeric field, defaulting to 0.
+
+    normalize() used to call float() directly, so a provider-sent "inf",
+    "nan", or garbage string either sailed into the catalog (breaking JSON
+    serialization and numeric filters downstream) or raised ValueError and
+    dropped the whole record. optional_float already rejects all three, so
+    a rejected value just means "no data", i.e. 0 here.
+    """
+    parsed = optional_float(value)
+    return parsed if parsed is not None else 0
+
+
 def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict[str, Any]:
     # The missing-key defaults below used to be bypassed by an explicit
     # null: str(None) is the literal "None", so a null OBJECT_NAME
@@ -160,7 +173,7 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
     # A missing/zero mean motion must not fall through to 1.0: orbit_class()
     # maps 1.0 to GEO, which would mislabel records with no orbital data.
     # 0 maps to "OTHER".
-    mean_motion = float(entry.get("MEAN_MOTION") or 0)
+    mean_motion = _gp_float(entry.get("MEAN_MOTION"))
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "satellite"
     return enrich_satellite({
         "id": f"{slug}-{norad_id}",
@@ -168,15 +181,15 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
         "noradId": norad_id,
         "objectId": str(entry.get("OBJECT_ID") or "unknown"),
         "epoch": str(entry.get("EPOCH") or ""),
-        "inclination": float(entry.get("INCLINATION") or 0),
-        "raan": float(entry.get("RA_OF_ASC_NODE") or 0),
-        "eccentricity": float(entry.get("ECCENTRICITY") or 0),
-        "argPericenter": float(entry.get("ARG_OF_PERICENTER") or 0),
-        "meanAnomaly": float(entry.get("MEAN_ANOMALY") or 0),
+        "inclination": _gp_float(entry.get("INCLINATION")),
+        "raan": _gp_float(entry.get("RA_OF_ASC_NODE")),
+        "eccentricity": _gp_float(entry.get("ECCENTRICITY")),
+        "argPericenter": _gp_float(entry.get("ARG_OF_PERICENTER")),
+        "meanAnomaly": _gp_float(entry.get("MEAN_ANOMALY")),
         "meanMotion": mean_motion,
-        "bstar": float(entry.get("BSTAR") or 0),
-        "meanMotionDot": float(entry.get("MEAN_MOTION_DOT") or 0),
-        "meanMotionDdot": float(entry.get("MEAN_MOTION_DDOT") or 0),
+        "bstar": _gp_float(entry.get("BSTAR")),
+        "meanMotionDot": _gp_float(entry.get("MEAN_MOTION_DOT")),
+        "meanMotionDdot": _gp_float(entry.get("MEAN_MOTION_DDOT")),
         "elementSetNo": int(entry.get("ELEMENT_SET_NO") or 0),
         "operator": identify_operator(name),
         "orbit": orbit_class(mean_motion),

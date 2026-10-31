@@ -44,9 +44,14 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     # Use -abs(): the API sometimes already returns a signed value alongside
     # the direction flag, and multiplying an already-negative value by -1
     # would flip it into the wrong hemisphere.
-    if latitude is not None and record.get("lat-dir") == "S":
+    # Direction flags arrive in whatever case/whitespace the feed used
+    # ("s", " S "); comparing raw strings silently dropped the flag and
+    # plotted southern/western events in the wrong hemisphere.
+    def _direction(value: Any) -> str:
+        return value.strip().upper() if isinstance(value, str) else ""
+    if latitude is not None and _direction(record.get("lat-dir")) == "S":
         latitude = -abs(latitude)
-    if longitude is not None and record.get("lon-dir") == "W":
+    if longitude is not None and _direction(record.get("lon-dir")) == "W":
         longitude = -abs(longitude)
     components = [optional_float(record.get(key)) for key in ("vx", "vy", "vz")]
     velocity = math.sqrt(sum(value * value for value in components)) if all(value is not None for value in components) else None

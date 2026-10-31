@@ -22,9 +22,17 @@ def _as_dict(value: Any) -> dict[str, Any]:
 
 def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     approaches = entry.get("close_approach_data")
-    if not isinstance(approaches, list) or not approaches or not isinstance(approaches[0], dict):
+    if not isinstance(approaches, list) or not approaches:
         return None
-    approach = approaches[0]
+    # An object can carry several approaches and they are not guaranteed
+    # to arrive in date order, so the first entry is not necessarily the
+    # next close approach. Use the earliest dated approach; entries
+    # without a usable date cannot be ordered and are skipped.
+    dated = [a for a in approaches
+             if isinstance(a, dict) and optional_str(a.get("close_approach_date"))]
+    if not dated:
+        return None
+    approach = min(dated, key=lambda a: a["close_approach_date"])
     # NASA sometimes returns null (or a non-object value) for nested objects;
     # treat them as empty dicts instead of crashing with AttributeError. An
     # AttributeError here would escape impact.py's except clause as an
