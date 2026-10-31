@@ -190,3 +190,41 @@ def test_normalize_neo_treats_non_string_id_and_name_as_absent() -> None:
     item = normalize_neo(payload)
     assert item is not None
     assert item.id == "ref-9"
+
+
+def test_normalize_neo_uses_earliest_approach_not_first() -> None:
+    # Approaches are not guaranteed to arrive in date order, so the first
+    # entry is not necessarily the next close approach.
+    payload = _payload(close_approach_data=[
+        {"close_approach_date": "2026-09-10",
+         "close_approach_date_full": "2026-Sep-10 12:00",
+         "relative_velocity": {"kilometers_per_second": "9"},
+         "miss_distance": {"kilometers": "100", "lunar": "0.3"},
+         "orbiting_body": "Earth"},
+        {"close_approach_date": "2026-08-08",
+         "close_approach_date_full": "2026-Aug-08 12:00",
+         "relative_velocity": {"kilometers_per_second": "12.5"},
+         "miss_distance": {"kilometers": "384400", "lunar": "1.0"},
+         "orbiting_body": "Earth"},
+    ])
+    item = normalize_neo(payload)
+    assert item is not None
+    assert item.closeApproachDate == "2026-08-08"
+    assert item.closeApproachDateTime == "2026-Aug-08 12:00"
+    assert item.relativeVelocityKmS == 12.5
+
+
+def test_normalize_neo_skips_undated_approaches() -> None:
+    payload = _payload(close_approach_data=[
+        {"relative_velocity": {"kilometers_per_second": "9"},
+         "miss_distance": {"kilometers": "100", "lunar": "0.3"},
+         "orbiting_body": "Earth"},
+        {"close_approach_date": "2026-08-08",
+         "close_approach_date_full": "2026-Aug-08 12:00",
+         "relative_velocity": {"kilometers_per_second": "12.5"},
+         "miss_distance": {"kilometers": "384400", "lunar": "1.0"},
+         "orbiting_body": "Earth"},
+    ])
+    item = normalize_neo(payload)
+    assert item is not None
+    assert item.closeApproachDate == "2026-08-08"
