@@ -29,6 +29,10 @@ def tls_context() -> ssl.SSLContext:
             if _tls_context is None:
                 try:
                     _tls_context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                except (ImportError, NotImplementedError):
+                except Exception:
+                    # The fallback is about the native store being
+                    # unusable, not just absent: a broken store that
+                    # raises anything else must still fall back to
+                    # certifi instead of failing every upstream fetch.
                     _tls_context = ssl.create_default_context(cafile=certifi.where())
     return _tls_context
