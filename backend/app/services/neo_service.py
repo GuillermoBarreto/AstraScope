@@ -28,11 +28,27 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     # to arrive in date order, so the first entry is not necessarily the
     # next close approach. Use the earliest dated approach; entries
     # without a usable date cannot be ordered and are skipped.
-    dated = [a for a in approaches
-             if isinstance(a, dict) and optional_str(a.get("close_approach_date"))]
+    # Compare parsed dates, not strings: a non-padded "2026-9-2" sorts
+    # after "2026-10-01" as a string even though it is earlier, and an
+    # unparseable date must not win by string order either.
+    dated = []
+    for a in approaches:
+        if not isinstance(a, dict):
+            continue
+        raw_date = optional_str(a.get("close_approach_date"))
+        if not raw_date:
+            continue
+        try:
+            parsed = datetime.strptime(raw_date, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        dated.append((parsed, a))
     if not dated:
         return None
-    approach = min(dated, key=lambda a: a["close_approach_date"])
+    parsed_date, approach = min(dated, key=lambda pair: pair[0])
+    # Normalize to zero-padded ISO so the feed sort in fetch_neos (which
+    # compares date strings) orders these the same way.
+    approach_date = parsed_date.isoformat()
     # NASA sometimes returns null (or a non-object value) for nested objects;
     # treat them as empty dicts instead of crashing with AttributeError. An
     # AttributeError here would escape impact.py's except clause as an
@@ -40,7 +56,6 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     diameter = _as_dict(_as_dict(entry.get("estimated_diameter")).get("kilometers"))
     velocity = _as_dict(approach.get("relative_velocity"))
     distance = _as_dict(approach.get("miss_distance"))
-    approach_date = optional_str(approach.get("close_approach_date")) or ""
     if not approach_date:
         return None
     # Issue #69, continued: close_approach_date went through optional_str

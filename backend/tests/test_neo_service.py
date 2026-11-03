@@ -228,3 +228,39 @@ def test_normalize_neo_skips_undated_approaches() -> None:
     item = normalize_neo(payload)
     assert item is not None
     assert item.closeApproachDate == "2026-08-08"
+
+def test_normalize_neo_parses_dates_not_strings() -> None:
+    # String order would pick "2026-10-01" over "2026-9-2" ("1" < "9");
+    # parsed-date order picks the September approach.
+    payload = _payload(close_approach_data=[
+        {"close_approach_date": "2026-10-01",
+         "close_approach_date_full": "2026-Oct-01 12:00",
+         "relative_velocity": {"kilometers_per_second": "9"},
+         "miss_distance": {"kilometers": "100", "lunar": "0.3"},
+         "orbiting_body": "Earth"},
+        {"close_approach_date": "2026-9-2",
+         "close_approach_date_full": "2026-Sep-02 12:00",
+         "relative_velocity": {"kilometers_per_second": "12.5"},
+         "miss_distance": {"kilometers": "384400", "lunar": "1.0"},
+         "orbiting_body": "Earth"},
+    ])
+    item = normalize_neo(payload)
+    assert item is not None
+    assert item.closeApproachDate == "2026-09-02"
+
+
+def test_normalize_neo_skips_unparseable_dates() -> None:
+    payload = _payload(close_approach_data=[
+        {"close_approach_date": "not-a-date",
+         "relative_velocity": {"kilometers_per_second": "9"},
+         "miss_distance": {"kilometers": "100", "lunar": "0.3"},
+         "orbiting_body": "Earth"},
+        {"close_approach_date": "2026-08-08",
+         "close_approach_date_full": "2026-Aug-08 12:00",
+         "relative_velocity": {"kilometers_per_second": "12.5"},
+         "miss_distance": {"kilometers": "384400", "lunar": "1.0"},
+         "orbiting_body": "Earth"},
+    ])
+    item = normalize_neo(payload)
+    assert item is not None
+    assert item.closeApproachDate == "2026-08-08"
