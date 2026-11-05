@@ -28,3 +28,10 @@ describe('apiUrl whitespace trimming', () => {
     expect(apiUrl('/health')).toBe('/api/health');
   });
 });
+
+describe('apiUrl trailing slashes', () => {
+  it('strips more than one trailing slash from the base URL', () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://example.invalid/v1//');
+    expect(apiUrl('/satellites')).toBe('https://example.invalid/v1/satellites');
+  });
+});

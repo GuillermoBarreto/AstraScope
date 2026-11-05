@@ -35,3 +35,9 @@ describe('freshnessLabel', () => {
     expect(freshnessLabel('not-a-date', now)).toBe('');
   });
 });
+
+describe('formatUtcClock invalid input', () => {
+  it('returns an empty string for an invalid date', () => {
+    expect(formatUtcClock(new Date('not-a-date'))).toBe('');
+  });
+});

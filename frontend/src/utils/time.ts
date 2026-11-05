@@ -1,4 +1,5 @@
 export function formatUtcClock(value: Date) {
+  if (!value || Number.isNaN(value.getTime())) return '';
   return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')} ${String(value.getUTCHours()).padStart(2, '0')}:${String(value.getUTCMinutes()).padStart(2, '0')}:${String(value.getUTCSeconds()).padStart(2, '0')} UTC`;
 }
 
