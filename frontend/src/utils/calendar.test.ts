@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Observer, Satellite, SatellitePass } from '@/types/satellite';
-import { calendarFilename, satellitePassCalendar } from './calendar';
+import { calendarFilename, foldIcsLine, satellitePassCalendar } from './calendar';
 
 const satellite = {
   id: 'iss-25544', name: 'ISS (ZARYA)', noradId: 25544, objectId: '1998-067A', epoch: '',
@@ -29,6 +29,30 @@ describe('satellite pass calendar', () => {
     expect(calendar.split('\r\n').filter((line) => line === 'BEGIN:VEVENT')).toHaveLength(1);
     expect(calendar.split('\r\n').filter((line) => line === 'END:VEVENT')).toHaveLength(1);
     expect(calendar.replace(/\r\n/g, '')).not.toMatch(/[\r\n]/);
+  });
+
+  it('folds long lines so no line exceeds the 75-octet RFC 5545 limit', () => {
+    const calendar = satellitePassCalendar(
+      { ...satellite, name: 'A Very Long Satellite Name That Keeps Going And Going (DEBRIS)' },
+      pass,
+      { ...observer, label: 'Somewhere With A Really Long Observatory Name, Far Away' },
+      'https://astrascope.app/?satellite=long-name&observer=far-away',
+    );
+
+    const encoder = new TextEncoder();
+    for (const line of calendar.split('\r\n')) {
+      expect(encoder.encode(line).length).toBeLessThanOrEqual(75);
+    }
+    // Folding is reversible: unfolding gives back the long DESCRIPTION.
+    expect(calendar.replace(/\r\n /g, '')).toContain('Potentially visible A Very Long Satellite Name');
+  });
+
+  it('folds on octet boundaries for non-ASCII text', () => {
+    const folded = foldIcsLine(`DESCRIPTION:${'é'.repeat(60)}`);
+    for (const line of folded.split('\r\n')) {
+      expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(75);
+    }
+    expect(folded.replace(/\r\n /g, '')).toBe(`DESCRIPTION:${'é'.repeat(60)}`);
   });
 
   it('creates a portable UTC event with a reminder and escaped location', () => {
