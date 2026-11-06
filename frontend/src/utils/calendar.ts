@@ -5,6 +5,33 @@ const escapeIcs = (value: string) =>
 
 const utcStamp = (date: Date) => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 
+// RFC 5545 §3.1: no content line may exceed 75 octets. Fold longer lines
+// with CRLF + a single space; continuation lines carry the space, so they
+// hold one octet less of content. Octets are counted, not characters, so
+// non-ASCII names fold at the right place.
+const MAX_ICS_LINE_OCTETS = 75;
+
+export function foldIcsLine(line: string): string {
+  const encoder = new TextEncoder();
+  const chunks: string[] = [];
+  let current = '';
+  let currentOctets = 0;
+  let limit = MAX_ICS_LINE_OCTETS;
+  for (const char of line) {
+    const charOctets = encoder.encode(char).length;
+    if (currentOctets + charOctets > limit && current) {
+      chunks.push(current);
+      current = '';
+      currentOctets = 0;
+      limit = MAX_ICS_LINE_OCTETS - 1;
+    }
+    current += char;
+    currentOctets += charOctets;
+  }
+  if (current) chunks.push(current);
+  return chunks.join('\r\n ');
+}
+
 export function satellitePassCalendar(
   satellite: Satellite,
   pass: SatellitePass,
@@ -44,7 +71,7 @@ export function satellitePassCalendar(
     'END:VEVENT',
     'END:VCALENDAR',
     '',
-  ].join('\r\n');
+  ].map(foldIcsLine).join('\r\n');
 }
 
 export function calendarFilename(satellite: Satellite, pass: SatellitePass): string {

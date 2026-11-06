@@ -40,6 +40,11 @@ describe('SGP4 orbit utilities', () => {
     expect(satelliteVelocityKmS(iss, new Date('2026-08-02T12:10:00Z'))).toBeGreaterThan(7);
   });
 
+  it('returns null metrics for records with no usable mean motion', () => {
+    const metrics = orbitalMetrics({ ...iss, meanMotion: 0 }, new Date('2026-08-02T12:10:00Z'));
+    expect(metrics).toEqual({ periodMinutes: null, perigeeKm: null, apogeeKm: null, speedKmS: null });
+  });
+
   it('formats pass azimuths as compass directions', () => {
     expect(compassDirection(0)).toBe('N');
     expect(compassDirection(225)).toBe('SW');

@@ -95,7 +95,13 @@ export function satelliteVelocityKmS(satellite: Satellite, date = new Date()): n
 }
 
 export function orbitalMetrics(satellite: Satellite, date = new Date()) {
-  const periodMinutes = orbitalPeriodMinutes(satellite.meanMotion) ?? 0;
+  const periodMinutes = orbitalPeriodMinutes(satellite.meanMotion);
+  // Decayed objects and catalog-only records have no usable mean motion;
+  // report nothing rather than a semi-major axis of 0 and a perigee of
+  // exactly -6,378 km, which the details panel would otherwise display.
+  if (periodMinutes == null) {
+    return { periodMinutes: null, perigeeKm: null, apogeeKm: null, speedKmS: null };
+  }
   const periodSeconds = periodMinutes * 60;
   const semiMajorAxisKm = Math.cbrt(EARTH_GRAVITATIONAL_PARAMETER * (periodSeconds / (2 * Math.PI)) ** 2);
   const altitude = satelliteGeodetic(satellite, date)?.altitude ?? semiMajorAxisKm - EARTH_RADIUS_KM;
