@@ -869,8 +869,8 @@ function SatelliteComparison({
       velocity: formatVelocity(satelliteVelocityKmS(satellite, time)),
       period: formatPeriod(orbitalPeriodMinutes(satellite.meanMotion)),
       inclination: `${satellite.inclination.toFixed(1)}°`,
-      perigee: Number.isFinite(metrics.perigeeKm) ? `${Math.round(metrics.perigeeKm).toLocaleString()} km` : 'Not available',
-      apogee: Number.isFinite(metrics.apogeeKm) ? `${Math.round(metrics.apogeeKm).toLocaleString()} km` : 'Not available',
+      perigee: metrics.perigeeKm == null ? 'Not available' : `${Math.round(metrics.perigeeKm).toLocaleString()} km`,
+      apogee: metrics.apogeeKm == null ? 'Not available' : `${Math.round(metrics.apogeeKm).toLocaleString()} km`,
     };
   });
   const rows = [
@@ -1047,8 +1047,8 @@ function SatelliteDetails({
         <Detail label="Altitude" value={altitude == null ? 'Not available' : `${altitude.toLocaleString()} km`} />
         <Detail label="Velocity" value={formatVelocity(velocity)} />
         <Detail label="Orbital period" value={formatPeriod(period)} />
-        <Detail label="Perigee" value={Number.isFinite(metrics.perigeeKm) ? `${Math.round(metrics.perigeeKm).toLocaleString()} km` : 'Not available'} />
-        <Detail label="Apogee" value={Number.isFinite(metrics.apogeeKm) ? `${Math.round(metrics.apogeeKm).toLocaleString()} km` : 'Not available'} />
+        <Detail label="Perigee" value={metrics.perigeeKm == null ? 'Not available' : `${Math.round(metrics.perigeeKm).toLocaleString()} km`} />
+        <Detail label="Apogee" value={metrics.apogeeKm == null ? 'Not available' : `${Math.round(metrics.apogeeKm).toLocaleString()} km`} />
         <Detail label="Inclination" value={`${satellite.inclination.toFixed(1)}°`} />
         <Detail label="Latitude" value={location ? `${location.latitude.toFixed(2)}°` : '—'} />
         <Detail label="Longitude" value={location ? `${location.longitude.toFixed(2)}°` : '—'} />
