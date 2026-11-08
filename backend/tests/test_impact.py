@@ -36,6 +36,21 @@ def test_hazardous_filtering(monkeypatch) -> None:
     assert response.json()["neos"][0]["potentiallyHazardous"] is True
 
 
+def test_min_diameter_filter_falls_back_to_min_estimate(monkeypatch) -> None:
+    # An object with no maximum diameter but a known minimum still has a
+    # size: the filter used to drop it outright instead of falling back.
+    no_max = {**neo_payload(True), "id": "no-max"}
+    no_max["estimated_diameter"] = {"kilometers": {"estimated_diameter_min": 0.1, "estimated_diameter_max": None}}
+    items = [normalize_neo(no_max), normalize_neo(neo_payload(True))]
+    monkeypatch.setattr(impact_api, "fetch_neos", lambda *_args: items)
+    response = TestClient(app).get("/impact/neos?min_diameter_km=0.05")
+    assert response.status_code == 200
+    assert response.json()["total"] == 2
+    response = TestClient(app).get("/impact/neos?min_diameter_km=0.15")
+    assert response.json()["total"] == 1
+    assert response.json()["neos"][0]["id"] == "3542519"
+
+
 def test_fireball_normalization() -> None:
     fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
     item = normalize_fireball(fields, ["2026-08-01 01:02:03", "10", "S", "20", "W", "30", "2.5", "0.1", "3", "4", "0"])

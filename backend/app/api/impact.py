@@ -37,7 +37,12 @@ def neos(days: int = Query(7, ge=1, le=7), hazardous: bool = False, min_diameter
         if hazardous:
             items = [item for item in items if item.potentiallyHazardous]
         if min_diameter_km:
-            items = [item for item in items if (item.estimatedDiameterMaxKm or 0) >= min_diameter_km]
+            # Fall back to the minimum estimate when the maximum is
+            # missing: an object with no max but a known min still has a
+            # size, and the filter used to drop it outright.
+            items = [item for item in items if (
+                item.estimatedDiameterMaxKm if item.estimatedDiameterMaxKm is not None
+                else (item.estimatedDiameterMinKm or 0)) >= min_diameter_km]
         return response("neos", items, "NASA/JPL NeoWs")
     except (HTTPError, URLError, TimeoutError, ValueError, OSError) as exc:
         # Keep internal detail (paths, errnos, upstream fragments) in the server
