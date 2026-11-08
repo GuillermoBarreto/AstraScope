@@ -80,6 +80,22 @@ def test_fireball_normalization_rejects_incomplete_rows() -> None:
     assert normalize_fireball(fields, ["", "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"]) is None
 
 
+def test_fireball_trailing_whitespace_timestamp_is_stripped() -> None:
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    item = normalize_fireball(fields, ["2026-08-01 01:02:03 ", "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"])
+    assert item is not None
+    assert item.dateTime == "2026-08-01T01:02:03Z"
+
+
+def test_fireball_garbage_timestamp_is_rejected() -> None:
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    # Not a date at all, and a date-shaped string with impossible values:
+    # neither may normalize into a garbage dateTime.
+    assert normalize_fireball(fields, ["not-a-date", "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"]) is None
+    assert normalize_fireball(fields, ["2026-13-45 99:99:99", "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"]) is None
+    assert normalize_fireball(fields, ["   ", "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"]) is None
+
+
 def test_neo_normalization_rejects_missing_approach() -> None:
     assert normalize_neo({"id": "1", "name": "NoApproach"}) is None
     assert normalize_neo({**neo_payload(), "close_approach_data": []}) is None

@@ -36,9 +36,21 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     # appending "Z" to an already-zoned timestamp would produce malformed ISO
     # like "...ZZ" or "...+05Z" (a bare two-digit offset is a real ISO-8601
     # designator, so TZ_SUFFIX deliberately matches it too).
+    # Stamps sometimes arrive with trailing whitespace: strip it first, or
+    # the "Z" lands after a space ("...00 Z") and the frontend renders
+    # Invalid Date. A stamp that still doesn't parse as a date is malformed
+    # input too, so the row is skipped instead of normalizing into a
+    # garbage dateTime.
+    timestamp = timestamp.strip()
+    if not timestamp:
+        return None
     date_time = timestamp.replace(" ", "T")
     if not TZ_SUFFIX.search(date_time):
         date_time += "Z"
+    try:
+        datetime.fromisoformat(date_time.replace("Z", "+00:00").replace("z", "+00:00"))
+    except ValueError:
+        return None
     latitude = optional_float(record.get("lat"))
     longitude = optional_float(record.get("lon"))
     # Use -abs(): the API sometimes already returns a signed value alongside
