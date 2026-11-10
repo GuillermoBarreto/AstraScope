@@ -574,6 +574,12 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
             satellites.append(normalize(item, "space-track"))
         except (ValueError, TypeError):
             continue
+    if not satellites:
+        # Same rule as the CelesTrak and SatNOGS paths: an all-malformed
+        # payload is not an empty catalog to cache and serve labeled
+        # "spacetrack" — raise so fetch_primary_catalog falls through to
+        # the next provider (issue #65).
+        raise ValueError("Space-Track returned no valid orbital records")
     updated_at = datetime.now(timezone.utc).isoformat()
     write_disk_cache(satellites, updated_at, "spacetrack")
     return satellites, updated_at

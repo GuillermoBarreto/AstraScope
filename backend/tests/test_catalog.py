@@ -216,6 +216,58 @@ def test_disk_cache_preserves_upstream_provenance(tmp_path, monkeypatch) -> None
     )
 
 
+def test_spacetrack_all_malformed_payload_raises_instead_of_caching_empty(monkeypatch, tmp_path) -> None:
+    # Issue #65: an all-malformed payload passed the non-empty check, then
+    # the per-record loop skipped every record, and the empty list was
+    # still written to disk cache labeled "spacetrack". Like the CelesTrak
+    # and SatNOGS paths, it must raise so fetch_primary_catalog falls
+    # through to the next provider.
+    class ConfiguredSpaceTrack:
+        space_track_identity = "user"
+        space_track_password = "pass"
+
+        @staticmethod
+        def has_space_track_credentials() -> bool:
+            return True
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self._body = body
+
+        def read(self) -> bytes:
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    class FakeOpener:
+        def open(self, request, timeout=None):
+            if request.full_url == main.SPACE_TRACK_LOGIN_URL:
+                return FakeResponse(b"")
+            return FakeResponse(json.dumps([None, "not-a-record", 42]).encode())
+
+    class FullJar:
+        # The login check only cares that the jar is non-empty; a real
+        # cookie is beside the point for this test.
+        def __bool__(self) -> bool:
+            return True
+
+    monkeypatch.setattr(main, "settings", ConfiguredSpaceTrack())
+    monkeypatch.setattr(main, "CookieJar", FullJar)
+    monkeypatch.setattr(main, "build_opener", lambda *args, **kwargs: FakeOpener())
+    monkeypatch.setattr(main, "CACHE_FILE", tmp_path / "active-satellites.json")
+    main.fetch_spacetrack_catalog.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="no valid orbital records"):
+            main.fetch_spacetrack_catalog(1)
+    finally:
+        main.fetch_spacetrack_catalog.cache_clear()
+    assert not (tmp_path / "active-satellites.json").exists()
+
+
 def test_primary_catalog_falls_back_to_celestrak(monkeypatch) -> None:
     class ConfiguredSpaceTrack:
         @staticmethod
