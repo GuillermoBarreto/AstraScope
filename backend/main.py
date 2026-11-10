@@ -164,12 +164,28 @@ def _gp_float(value: Any) -> float:
     return parsed if parsed is not None else 0
 
 
+def _gp_int(value: Any) -> int:
+    """Lenient int for a GP numeric field, defaulting to 0.
+
+    Same shape as _gp_float: normalize() called int() directly, so a
+    provider-sent "ABC" NORAD_CAT_ID raised ValueError and dropped the
+    whole record (issue #75). A non-numeric id means "no data", i.e. 0
+    here. Booleans are garbage like everywhere else, not 0/1.
+    """
+    if isinstance(value, bool):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict[str, Any]:
     # The missing-key defaults below used to be bypassed by an explicit
     # null: str(None) is the literal "None", so a null OBJECT_NAME
     # produced a satellite literally named "None".
     name = str(entry.get("OBJECT_NAME") or "Unknown satellite")
-    norad_id = int(entry.get("NORAD_CAT_ID") or 0)
+    norad_id = _gp_int(entry.get("NORAD_CAT_ID"))
     # A missing/zero mean motion must not fall through to 1.0: orbit_class()
     # maps 1.0 to GEO, which would mislabel records with no orbital data.
     # 0 maps to "OTHER".
@@ -190,7 +206,7 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
         "bstar": _gp_float(entry.get("BSTAR")),
         "meanMotionDot": _gp_float(entry.get("MEAN_MOTION_DOT")),
         "meanMotionDdot": _gp_float(entry.get("MEAN_MOTION_DDOT")),
-        "elementSetNo": int(entry.get("ELEMENT_SET_NO") or 0),
+        "elementSetNo": _gp_int(entry.get("ELEMENT_SET_NO")),
         "operator": identify_operator(name),
         "orbit": orbit_class(mean_motion),
         "purpose": identify_purpose(name),
@@ -208,7 +224,7 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
 
 
 def normalize_satcat(entry: dict[str, Any]) -> dict[str, Any]:
-    norad_id = int(entry.get("NORAD_CAT_ID") or 0)
+    norad_id = _gp_int(entry.get("NORAD_CAT_ID"))
     name = str(entry.get("OBJECT_NAME") or "Unknown object").strip()
     decay_date = str(entry.get("DECAY_DATE") or "").strip() or None
     status = operational_status(entry.get("OPS_STATUS_CODE"), decay_date)
@@ -558,6 +574,12 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
             satellites.append(normalize(item, "space-track"))
         except (ValueError, TypeError):
             continue
+    if not satellites:
+        # Same rule as the CelesTrak and SatNOGS paths: an all-malformed
+        # payload is not an empty catalog to cache and serve labeled
+        # "spacetrack" — raise so fetch_primary_catalog falls through to
+        # the next provider (issue #65).
+        raise ValueError("Space-Track returned no valid orbital records")
     updated_at = datetime.now(timezone.utc).isoformat()
     write_disk_cache(satellites, updated_at, "spacetrack")
     return satellites, updated_at
