@@ -561,3 +561,21 @@ def test_normalize_rejects_non_finite_and_garbage_floats() -> None:
     assert item["eccentricity"] == 0
     assert item["bstar"] == 0
     assert item["orbit"] == "OTHER"
+
+
+def test_normalize_falls_back_to_zero_for_garbage_ids() -> None:
+    # Issue #75: normalize() called int() directly, so a non-numeric
+    # NORAD_CAT_ID raised ValueError and dropped the whole record. It
+    # now means "no data" and falls back to 0, like the float fields.
+    item = normalize({
+        "OBJECT_NAME": "BAD ID",
+        "OBJECT_ID": "2026-001A",
+        "NORAD_CAT_ID": "ABC",
+        "ELEMENT_SET_NO": "not-a-number",
+        "MEAN_MOTION": 15.5,
+    })
+    assert item["noradId"] == 0
+    assert item["elementSetNo"] == 0
+    assert item["id"] == "bad-id-0"
+    satcat = normalize_satcat(satcat_record(NORAD_CAT_ID="ABC"))
+    assert satcat["noradId"] == 0
