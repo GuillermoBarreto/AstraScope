@@ -30,7 +30,7 @@ export function ImpactWatch({ onMode }: { onMode: () => void }) {
   const status = neoFeed.loading || fireballFeed.loading ? 'loading' : errors.length === 2 ? 'offline' : 'live';
   const updatedAt = [neoFeed.payload?.updatedAt, fireballFeed.payload?.updatedAt].filter((value): value is string => Boolean(value)).sort()[0] ?? '';
 
-  const filteredNeos = useMemo(() => neos.filter((item) => (!hazardousOnly || item.potentiallyHazardous) && (item.estimatedDiameterMaxKm ?? 0) >= minDiameter), [hazardousOnly, minDiameter, neos]);
+  const filteredNeos = useMemo(() => neos.filter((item) => (!hazardousOnly || item.potentiallyHazardous) && (item.estimatedDiameterMaxKm ?? item.estimatedDiameterMinKm ?? 0) >= minDiameter), [hazardousOnly, minDiameter, neos]);
   const filteredFireballs = useMemo(() => fireballs.filter((item) => item.energy >= minEnergy && (coordinateFilter === 'all' || (coordinateFilter === 'available') === (item.latitude !== null && item.longitude !== null))), [coordinateFilter, fireballs, minEnergy]);
   const selected = filteredNeos.find((item) => item.id === selectedNeo) ?? filteredFireballs.find((item) => item.id === selectedFireball) ?? null;
   const hazardousCount = neos.filter((item) => item.potentiallyHazardous).length;
