@@ -56,8 +56,6 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     diameter = _as_dict(_as_dict(entry.get("estimated_diameter")).get("kilometers"))
     velocity = _as_dict(approach.get("relative_velocity"))
     distance = _as_dict(approach.get("miss_distance"))
-    if not approach_date:
-        return None
     # Issue #69, continued: close_approach_date went through optional_str
     # earlier, but id/name still used str(), so a dict/list id or name
     # became a "{...}" garbage string. Non-string values are absent here
