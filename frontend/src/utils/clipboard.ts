@@ -12,6 +12,11 @@ export async function copyText(value: string): Promise<boolean> {
   textarea.value = value;
   textarea.setAttribute('readonly', '');
   textarea.style.position = 'fixed';
+  // Pin it to the viewport corner: focusing a fixed element with no
+  // position makes mobile browsers scroll the page to bring it into
+  // view, which used to jump the page on every fallback copy.
+  textarea.style.top = '0';
+  textarea.style.left = '0';
   textarea.style.opacity = '0';
   document.body.appendChild(textarea);
   // Focusing first makes programmatic selection (and therefore copy) work
