@@ -26,6 +26,23 @@ describe('copyText', () => {
     expect(document.querySelector('textarea')).toBeNull();
   });
 
+  it('pins the fallback textarea to the viewport corner', async () => {
+    vi.stubGlobal('navigator', {});
+    let seen: HTMLTextAreaElement | null = null;
+    const execCommand = vi.fn().mockImplementation(() => {
+      // Capture the element while it is still in the document: the
+      // fallback removes it in a finally block.
+      seen = document.querySelector('textarea');
+      return true;
+    });
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand });
+
+    await expect(copyText('fallback')).resolves.toBe(true);
+    expect(seen?.style.position).toBe('fixed');
+    expect(seen?.style.top).toBe('0px');
+    expect(seen?.style.left).toBe('0px');
+  });
+
   it('reports failure when both copy methods are unavailable', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
     Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined });
