@@ -34,6 +34,17 @@ def test_tle_year_pivot_boundary() -> None:
     assert tle_object_id("98067A") == "1998-067A"
 
 
+def test_tle_epoch_rejects_impossible_day() -> None:
+    # A huge day-of-year used to raise OSError (not ValueError) and kill
+    # the whole SatNOGS sync instead of skipping that one record; a
+    # negative one silently produced a plausible-looking prior-year date.
+    with pytest.raises(ValueError):
+        tle_epoch("26999999999999")
+    with pytest.raises(ValueError):
+        tle_epoch("26-05.5")
+    assert tle_epoch("26001.5").startswith("2026-01-01")
+
+
 def test_normalize_satnogs_tle() -> None:
     satellite = normalize_satnogs(ISS)
     assert satellite["noradId"] == 25544
@@ -173,6 +184,15 @@ def test_catalog_classification() -> None:
     assert orbit_class(15.5) == "LEO"
     assert orbit_class(2.0) == "MEO"
     assert orbit_class(1.0) == "GEO"
+
+
+def test_identify_purpose_iss_needs_a_whole_word() -> None:
+    # The substring check used to tag any name containing "ISS" as a
+    # crewed station — "MISSION-1" and "DISMISS" included.
+    assert identify_purpose("ISS (ZARYA)") == "Crewed station"
+    assert identify_purpose("ISS DEB") == "Crewed station"
+    assert identify_purpose("MISSION-1") == "Other"
+    assert identify_purpose("DISMISS") == "Other"
 
 
 def test_curated_metadata_has_trusted_media_provenance() -> None:

@@ -139,6 +139,11 @@ def operational_status(code: Any, decay_date: Any = None) -> str:
 
 def identify_purpose(name: str) -> str:
     upper = name.upper()
+    # ISS must match as a whole word, like identify_operator does: the
+    # substring check used to tag "MISSION-1" or "DISMISS" as a crewed
+    # station (same false-positive family as curated_metadata, issue #45).
+    if "ISS" in set(re.split(r"[^A-Z0-9]+", upper)):
+        return "Crewed station"
     patterns = (
         ("Broadband", ("STARLINK", "ONEWEB", "KUIPER")),
         ("Navigation", ("GPS", "GLONASS", "GALILEO", "BEIDOU", "NAVSTAR")),
@@ -146,7 +151,7 @@ def identify_purpose(name: str) -> str:
         ("Earth observation", ("LANDSAT", "SENTINEL", "FLOCK", "DOVE", "SKYSAT", "TERRA", "AQUA")),
         ("Science", ("HST", "HUBBLE", "JWST", "SWIFT", "TESS", "CHANDRA")),
         ("Communications", ("IRIDIUM", "GLOBALSTAR", "INTELSAT", "SES-", "O3B")),
-        ("Crewed station", ("ISS", "TIANHE", "CSS (TIANHE)")),
+        ("Crewed station", ("TIANHE", "CSS (TIANHE)")),
     )
     return next((purpose for purpose, tokens in patterns if any(token in upper for token in tokens)), "Other")
 
@@ -305,6 +310,12 @@ def tle_epoch(value: str) -> str:
     year = _tle_int(value[:2])
     full_year = 2000 + year if year < TLE_YEAR_PIVOT else 1900 + year
     day = _tle_float(value[2:])
+    if not 1 <= day < 367:
+        # A garbage day-of-year used to reach fromtimestamp, where a huge
+        # value raised OSError (not ValueError) and killed the whole
+        # SatNOGS sync instead of skipping that one record; a negative
+        # one silently produced a plausible-looking prior-year date.
+        raise ValueError("Invalid SatNOGS TLE epoch")
     start = datetime(full_year, 1, 1, tzinfo=timezone.utc)
     return datetime.fromtimestamp(start.timestamp() + (day - 1) * 86400, timezone.utc).isoformat()
 
