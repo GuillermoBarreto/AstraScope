@@ -305,6 +305,12 @@ def tle_epoch(value: str) -> str:
     year = _tle_int(value[:2])
     full_year = 2000 + year if year < TLE_YEAR_PIVOT else 1900 + year
     day = _tle_float(value[2:])
+    if not 1 <= day < 367:
+        # A garbage day-of-year used to reach fromtimestamp, where a huge
+        # value raised OSError (not ValueError) and killed the whole
+        # SatNOGS sync instead of skipping that one record; a negative
+        # one silently produced a plausible-looking prior-year date.
+        raise ValueError("Invalid SatNOGS TLE epoch")
     start = datetime(full_year, 1, 1, tzinfo=timezone.utc)
     return datetime.fromtimestamp(start.timestamp() + (day - 1) * 86400, timezone.utc).isoformat()
 
