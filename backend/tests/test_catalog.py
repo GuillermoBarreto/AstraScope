@@ -186,6 +186,15 @@ def test_catalog_classification() -> None:
     assert orbit_class(1.0) == "GEO"
 
 
+def test_identify_purpose_iss_needs_a_whole_word() -> None:
+    # The substring check used to tag any name containing "ISS" as a
+    # crewed station — "MISSION-1" and "DISMISS" included.
+    assert identify_purpose("ISS (ZARYA)") == "Crewed station"
+    assert identify_purpose("ISS DEB") == "Crewed station"
+    assert identify_purpose("MISSION-1") == "Other"
+    assert identify_purpose("DISMISS") == "Other"
+
+
 def test_curated_metadata_has_trusted_media_provenance() -> None:
     iss = curated_metadata("ISS (ZARYA)")
     assert iss["description"].startswith("The International Space Station")

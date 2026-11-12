@@ -139,6 +139,11 @@ def operational_status(code: Any, decay_date: Any = None) -> str:
 
 def identify_purpose(name: str) -> str:
     upper = name.upper()
+    # ISS must match as a whole word, like identify_operator does: the
+    # substring check used to tag "MISSION-1" or "DISMISS" as a crewed
+    # station (same false-positive family as curated_metadata, issue #45).
+    if "ISS" in set(re.split(r"[^A-Z0-9]+", upper)):
+        return "Crewed station"
     patterns = (
         ("Broadband", ("STARLINK", "ONEWEB", "KUIPER")),
         ("Navigation", ("GPS", "GLONASS", "GALILEO", "BEIDOU", "NAVSTAR")),
@@ -146,7 +151,7 @@ def identify_purpose(name: str) -> str:
         ("Earth observation", ("LANDSAT", "SENTINEL", "FLOCK", "DOVE", "SKYSAT", "TERRA", "AQUA")),
         ("Science", ("HST", "HUBBLE", "JWST", "SWIFT", "TESS", "CHANDRA")),
         ("Communications", ("IRIDIUM", "GLOBALSTAR", "INTELSAT", "SES-", "O3B")),
-        ("Crewed station", ("ISS", "TIANHE", "CSS (TIANHE)")),
+        ("Crewed station", ("TIANHE", "CSS (TIANHE)")),
     )
     return next((purpose for purpose, tokens in patterns if any(token in upper for token in tokens)), "Other")
 
