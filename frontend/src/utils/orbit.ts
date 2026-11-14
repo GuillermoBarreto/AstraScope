@@ -122,10 +122,18 @@ export function groundTrack(satellite: Satellite, center: Date, samples = 120) {
   // new Date(Infinity)/new Date(NaN), which would feed Invalid Dates to SGP4.
   const periodMinutes = orbitalPeriodMinutes(satellite.meanMotion);
   if (periodMinutes == null) return [];
-  return Array.from({ length: samples + 1 }, (_, index) => {
+  const scale = EARTH_SCENE_RADIUS / EARTH_RADIUS_KM;
+  const points: [number, number, number][] = [];
+  for (let index = 0; index <= samples; index++) {
     const offset = (index / samples - 0.5) * periodMinutes * 60_000;
-    return satellitePosition(satellite, new Date(center.getTime() + offset));
-  });
+    const result = state(satellite, new Date(center.getTime() + offset));
+    // A failed propagation used to plot at [0, 0, 0] — the center of the
+    // earth — drawing a line straight through the planet (issue #79).
+    // Skip the sample instead; the track just has a gap there.
+    if (!result) continue;
+    points.push([result.positionEcf.x * scale, result.positionEcf.z * scale, -result.positionEcf.y * scale]);
+  }
+  return points;
 }
 
 export function footprintPoints(satellite: Satellite, date: Date, samples = 72) {
