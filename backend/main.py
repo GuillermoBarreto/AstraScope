@@ -371,6 +371,29 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
     })
 
 
+def _valid_orbital_record(item: Any) -> bool:
+    """An orbital cache record the catalog endpoints can index: they
+    read noradId and objectType directly (catalog_orbits, object
+    detail), so a record missing either 500s (issue #93)."""
+    return (isinstance(item, dict)
+            and isinstance(item.get("noradId"), int)
+            and not isinstance(item.get("noradId"), bool)
+            and "objectType" in item)
+
+
+def _valid_catalog_record(item: Any) -> bool:
+    """A SATCAT cache record the catalog endpoints can index: the
+    filters and summary read noradId, name, objectType,
+    operationalStatus, and decayDate directly (issue #93)."""
+    return (isinstance(item, dict)
+            and isinstance(item.get("noradId"), int)
+            and not isinstance(item.get("noradId"), bool)
+            and isinstance(item.get("name"), str)
+            and "objectType" in item
+            and "operationalStatus" in item
+            and "decayDate" in item)
+
+
 def read_disk_cache() -> tuple[list[dict[str, Any]], str, str] | None:
     try:
         cached = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
@@ -379,7 +402,7 @@ def read_disk_cache() -> tuple[list[dict[str, Any]], str, str] | None:
         satellites = cached.get("satellites")
         updated_at = cached.get("updatedAt")
         upstream = cached.get("upstream")
-        if isinstance(satellites, list) and all(isinstance(item, dict) for item in satellites) and isinstance(updated_at, str) and upstream in {"celestrak", "spacetrack", "satnogs"}:
+        if isinstance(satellites, list) and all(_valid_orbital_record(item) for item in satellites) and isinstance(updated_at, str) and upstream in {"celestrak", "spacetrack", "satnogs"}:
             return satellites, updated_at, upstream
     except (OSError, json.JSONDecodeError, AttributeError):
         pass
@@ -408,8 +431,11 @@ def read_public_catalog_cache() -> tuple[list[dict[str, Any]], str] | None:
         updated_at = cached.get("updatedAt")
         # A non-dict entry (hand-seeded or corrupt cache) would crash the
         # catalog endpoints that index record keys, so treat it as a miss
-        # and let the caller re-sync instead of serving a 500.
-        if isinstance(objects, list) and all(isinstance(item, dict) for item in objects) and isinstance(updated_at, str):
+        # and let the caller re-sync instead of serving a 500. The same
+        # holds for a dict missing the keys those endpoints index
+        # (issue #93): normalize() always writes them, so a record
+        # without them is corrupt, not a sparse-but-valid entry.
+        if isinstance(objects, list) and all(_valid_catalog_record(item) for item in objects) and isinstance(updated_at, str):
             return objects, updated_at
     except (OSError, json.JSONDecodeError, AttributeError):
         pass
