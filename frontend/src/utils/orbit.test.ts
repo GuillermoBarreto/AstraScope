@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Satellite } from '@/types/satellite';
-import { compassDirection, orbitalMetrics, orbitalPeriodMinutes, satelliteGeodetic, satellitePosition, satelliteVelocityKmS, sunScenePosition } from '@/utils/orbit';
+import { compassDirection, groundTrack, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satellitePosition, satelliteVelocityKmS, sunScenePosition } from '@/utils/orbit';
 
 const iss: Satellite = {
   id: 'iss-25544', name: 'ISS', noradId: 25544, objectId: '1998-067A',
@@ -49,5 +49,53 @@ describe('SGP4 orbit utilities', () => {
     expect(compassDirection(0)).toBe('N');
     expect(compassDirection(225)).toBe('SW');
     expect(compassDirection(359)).toBe('N');
+  });
+});
+
+
+describe('predictPasses visibility', () => {
+  const observer = { latitude: 41.8781, longitude: -87.6298, altitudeKm: 0, label: 'Chicago, IL' };
+
+  it('marks a one-sample pass visible when the satellite is sunlit', () => {
+    // A pass clipped to a single sample: the window holds only the peak
+    // minute, so rise == set == peak. The peak is the first sample, and
+    // the visibility check used to run only when a sample beat the
+    // running maximum — the first sample never does, so a one-sample
+    // pass stayed invisible even under a sunlit sky (issue #85).
+    const peak = new Date('2026-08-02T17:04:00Z');
+    const passes = predictPasses(iss, observer, peak, 1 / 120);
+    expect(passes).toHaveLength(1);
+    expect(passes[0].rise.getTime()).toBe(passes[0].set.getTime());
+    expect(passes[0].visible).toBe(true);
+  });
+});
+
+describe('groundTrack failures', () => {
+  it('skips samples SGP4 cannot propagate instead of drawing to the earth center', () => {
+    // A record with an impossible eccentricity makes the propagator
+    // fail every sample, and the old code plotted those at [0, 0, 0] —
+    // the center of the earth (issue #79). No returned point may be
+    // the origin. (Without TLEs, so the elements — not the TLE — feed
+    // the propagator.)
+    const noTle = { ...iss, tle1: undefined, tle2: undefined, eccentricity: 2 };
+    const points = groundTrack(noTle, new Date('2026-08-02T12:10:00Z'));
+    expect(points).toEqual([]);
+  });
+});
+
+describe('satrec cache', () => {
+  it('rebuilds the propagator when the TLE changes for the same id', () => {
+    // A refreshed TLE used to be ignored: the cache key was the
+    // satellite id alone, so new elements never took effect (issue #58).
+    const date = new Date('2026-08-02T12:10:00Z');
+    const first = satellitePosition(iss, date);
+    const refreshed = {
+      ...iss,
+      tle2: '2 25544  51.6315  70.8679 0007172   4.7554 355.3502 15.99313226578933',
+      meanMotion: 15.99313226,
+    };
+    const second = satellitePosition(refreshed, date);
+    expect(second).not.toEqual(first);
+    expect(second.every(Number.isFinite)).toBe(true);
   });
 });

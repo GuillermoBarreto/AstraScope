@@ -227,10 +227,10 @@ def test_disk_cache_preserves_upstream_provenance(tmp_path, monkeypatch) -> None
     cache_file = tmp_path / "active-satellites.json"
     monkeypatch.setattr(main, "CACHE_FILE", cache_file)
 
-    main.write_disk_cache([{"noradId": 25544}], "2026-08-05T12:00:00+00:00", "celestrak")
+    main.write_disk_cache([{"noradId": 25544, "objectType": "PAYLOAD"}], "2026-08-05T12:00:00+00:00", "celestrak")
 
     assert main.read_disk_cache() == (
-        [{"noradId": 25544}],
+        [{"noradId": 25544, "objectType": "PAYLOAD"}],
         "2026-08-05T12:00:00+00:00",
         "celestrak",
     )
@@ -651,3 +651,22 @@ def test_normalize_falls_back_to_zero_for_garbage_ids() -> None:
     assert item["id"] == "bad-id-0"
     satcat = normalize_satcat(satcat_record(NORAD_CAT_ID="ABC"))
     assert satcat["noradId"] == 0
+
+
+def test_public_catalog_cache_rejects_records_missing_keys(tmp_path, monkeypatch) -> None:
+    # Issue #93: a hand-seeded cache record missing the keys the catalog
+    # endpoints index (name, objectType, operationalStatus, decayDate)
+    # used to 500 every catalog endpoint; it reads as a miss now.
+    cache_file = tmp_path / "public-catalog.json"
+    monkeypatch.setattr(main, "PUBLIC_CATALOG_CACHE_FILE", cache_file)
+    cache_file.write_text(json.dumps({"objects": [{"noradId": 25544, "name": "ISS"}], "updatedAt": "2026-08-29T00:00:00+00:00"}), encoding="utf-8")
+    assert main.read_public_catalog_cache() is None
+
+
+def test_disk_cache_rejects_records_missing_keys(tmp_path, monkeypatch) -> None:
+    # Same class as the public catalog: an orbital record without the
+    # noradId/objectType the endpoints index must read as a miss.
+    cache_file = tmp_path / "active-satellites.json"
+    monkeypatch.setattr(main, "CACHE_FILE", cache_file)
+    cache_file.write_text(json.dumps({"schemaVersion": main.CACHE_SCHEMA_VERSION, "satellites": [{"noradId": 25544}], "updatedAt": "2026-08-05T12:00:00+00:00", "upstream": "celestrak"}), encoding="utf-8")
+    assert main.read_disk_cache() is None

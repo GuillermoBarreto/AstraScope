@@ -19,11 +19,25 @@ import type { Observer, Satellite, SatellitePass } from '@/types/satellite';
 export const EARTH_RADIUS_KM = 6378.137;
 export const EARTH_SCENE_RADIUS = 1.35;
 const EARTH_GRAVITATIONAL_PARAMETER = 398600.4418;
-const satrecCache = new Map<string, SatRec>();
+const satrecCache = new Map<string, { key: string; satrec: SatRec }>();
+
+function satrecCacheKey(satellite: Satellite): string {
+  // Everything the propagator is built from: a refreshed TLE (or
+  // updated elements) for the same id must rebuild the satrec instead
+  // of reusing the stale one (issue #58).
+  return [
+    satellite.id, satellite.tle1 ?? '', satellite.tle2 ?? '',
+    satellite.epoch, satellite.meanMotion, satellite.eccentricity,
+    satellite.inclination, satellite.raan, satellite.argPericenter,
+    satellite.meanAnomaly, satellite.noradId, satellite.elementSetNo,
+    satellite.bstar, satellite.meanMotionDot, satellite.meanMotionDdot,
+  ].join('|');
+}
 
 function getSatrec(satellite: Satellite) {
+  const key = satrecCacheKey(satellite);
   const cached = satrecCache.get(satellite.id);
-  if (cached) return cached;
+  if (cached && cached.key === key) return cached.satrec;
   const satrec = satellite.tle1 && satellite.tle2
     ? twoline2satrec(satellite.tle1, satellite.tle2)
     : json2satrec({
@@ -42,7 +56,7 @@ function getSatrec(satellite: Satellite) {
         MEAN_MOTION_DOT: satellite.meanMotionDot,
         MEAN_MOTION_DDOT: satellite.meanMotionDdot,
       });
-  satrecCache.set(satellite.id, satrec);
+  satrecCache.set(satellite.id, { key, satrec });
   return satrec;
 }
 
@@ -122,10 +136,18 @@ export function groundTrack(satellite: Satellite, center: Date, samples = 120) {
   // new Date(Infinity)/new Date(NaN), which would feed Invalid Dates to SGP4.
   const periodMinutes = orbitalPeriodMinutes(satellite.meanMotion);
   if (periodMinutes == null) return [];
-  return Array.from({ length: samples + 1 }, (_, index) => {
+  const scale = EARTH_SCENE_RADIUS / EARTH_RADIUS_KM;
+  const points: [number, number, number][] = [];
+  for (let index = 0; index <= samples; index++) {
     const offset = (index / samples - 0.5) * periodMinutes * 60_000;
-    return satellitePosition(satellite, new Date(center.getTime() + offset));
-  });
+    const result = state(satellite, new Date(center.getTime() + offset));
+    // A failed propagation used to plot at [0, 0, 0] — the center of the
+    // earth — drawing a line straight through the planet (issue #79).
+    // Skip the sample instead; the track just has a gap there.
+    if (!result) continue;
+    points.push([result.positionEcf.x * scale, result.positionEcf.z * scale, -result.positionEcf.y * scale]);
+  }
+  return points;
 }
 
 export function footprintPoints(satellite: Satellite, date: Date, samples = 72) {
@@ -174,7 +196,12 @@ export function predictPasses(satellite: Satellite, observer: Observer, start: D
       if (!current) current = { rise: date, peak: date, set: date, maxElevation: elevation, rangeKm: look.rangeSat, visible: false, riseAzimuth: look.azimuth * 180 / Math.PI, setAzimuth: look.azimuth * 180 / Math.PI };
       current.set = date;
       current.setAzimuth = look.azimuth * 180 / Math.PI;
-      if (elevation > current.maxElevation) {
+      // >=, not >: the first sample sets maxElevation, so a strict >
+      // never evaluates visibility for it — a one-sample pass stayed
+      // invisible even under a sunlit sky (issue #85). Re-running the
+      // check on a tied elevation is harmless: it recomputes the same
+      // sunlit/twilight test for the current minute.
+      if (elevation >= current.maxElevation) {
         current.peak = date;
         current.maxElevation = elevation;
         current.rangeKm = look.rangeSat;
