@@ -19,11 +19,25 @@ import type { Observer, Satellite, SatellitePass } from '@/types/satellite';
 export const EARTH_RADIUS_KM = 6378.137;
 export const EARTH_SCENE_RADIUS = 1.35;
 const EARTH_GRAVITATIONAL_PARAMETER = 398600.4418;
-const satrecCache = new Map<string, SatRec>();
+const satrecCache = new Map<string, { key: string; satrec: SatRec }>();
+
+function satrecCacheKey(satellite: Satellite): string {
+  // Everything the propagator is built from: a refreshed TLE (or
+  // updated elements) for the same id must rebuild the satrec instead
+  // of reusing the stale one (issue #58).
+  return [
+    satellite.id, satellite.tle1 ?? '', satellite.tle2 ?? '',
+    satellite.epoch, satellite.meanMotion, satellite.eccentricity,
+    satellite.inclination, satellite.raan, satellite.argPericenter,
+    satellite.meanAnomaly, satellite.noradId, satellite.elementSetNo,
+    satellite.bstar, satellite.meanMotionDot, satellite.meanMotionDdot,
+  ].join('|');
+}
 
 function getSatrec(satellite: Satellite) {
+  const key = satrecCacheKey(satellite);
   const cached = satrecCache.get(satellite.id);
-  if (cached) return cached;
+  if (cached && cached.key === key) return cached.satrec;
   const satrec = satellite.tle1 && satellite.tle2
     ? twoline2satrec(satellite.tle1, satellite.tle2)
     : json2satrec({
@@ -42,7 +56,7 @@ function getSatrec(satellite: Satellite) {
         MEAN_MOTION_DOT: satellite.meanMotionDot,
         MEAN_MOTION_DDOT: satellite.meanMotionDdot,
       });
-  satrecCache.set(satellite.id, satrec);
+  satrecCache.set(satellite.id, { key, satrec });
   return satrec;
 }
 

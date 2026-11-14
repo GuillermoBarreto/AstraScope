@@ -82,3 +82,20 @@ describe('groundTrack failures', () => {
     expect(points).toEqual([]);
   });
 });
+
+describe('satrec cache', () => {
+  it('rebuilds the propagator when the TLE changes for the same id', () => {
+    // A refreshed TLE used to be ignored: the cache key was the
+    // satellite id alone, so new elements never took effect (issue #58).
+    const date = new Date('2026-08-02T12:10:00Z');
+    const first = satellitePosition(iss, date);
+    const refreshed = {
+      ...iss,
+      tle2: '2 25544  51.6315  70.8679 0007172   4.7554 355.3502 15.99313226578933',
+      meanMotion: 15.99313226,
+    };
+    const second = satellitePosition(refreshed, date);
+    expect(second).not.toEqual(first);
+    expect(second.every(Number.isFinite)).toBe(true);
+  });
+});
