@@ -66,3 +66,13 @@ describe('satellite pass calendar', () => {
     expect(calendarFilename(satellite, pass)).toBe('iss-zarya-2026-08-15.ics');
   });
 });
+
+describe('invalid pass dates', () => {
+  it('rejects a pass with an invalid date instead of a raw RangeError', () => {
+    // toISOString on an Invalid Date throws RangeError with no hint
+    // about which export failed; the export names the problem (issue #80).
+    const bad = { ...pass, rise: new Date('not-a-date'), set: new Date('not-a-date') };
+    expect(() => satellitePassCalendar(satellite, bad, observer, 'https://astrascope.app/')).toThrow('invalid date');
+    expect(() => calendarFilename(satellite, bad)).toThrow('invalid date');
+  });
+});

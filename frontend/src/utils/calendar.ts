@@ -5,6 +5,10 @@ const escapeIcs = (value: string) =>
 
 const utcStamp = (date: Date) => date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 
+function validPassDate(date: Date): boolean {
+  return date instanceof Date && !Number.isNaN(date.getTime());
+}
+
 // RFC 5545 §3.1: no content line may exceed 75 octets. Fold longer lines
 // with CRLF + a single space; continuation lines carry the space, so they
 // hold one octet less of content. Octets are counted, not characters, so
@@ -38,6 +42,12 @@ export function satellitePassCalendar(
   observer: Observer,
   satelliteUrl: string,
 ): string {
+  // An Invalid Date used to surface as a raw RangeError from
+  // toISOString deep inside the export (issue #80); fail with a
+  // message that names the problem instead.
+  if (!validPassDate(pass.rise) || !validPassDate(pass.set)) {
+    throw new Error('Cannot export a pass with an invalid date');
+  }
   const durationMinutes = Math.max(1, Math.round((pass.set.getTime() - pass.rise.getTime()) / 60_000));
   const description = [
     `Potentially visible ${satellite.name} pass.`,
@@ -75,6 +85,9 @@ export function satellitePassCalendar(
 }
 
 export function calendarFilename(satellite: Satellite, pass: SatellitePass): string {
+  if (!validPassDate(pass.rise)) {
+    throw new Error('Cannot export a pass with an invalid date');
+  }
   const safeName = satellite.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return `${safeName || `norad-${satellite.noradId}`}-${pass.rise.toISOString().slice(0, 10)}.ics`;
 }
