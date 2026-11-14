@@ -174,7 +174,12 @@ export function predictPasses(satellite: Satellite, observer: Observer, start: D
       if (!current) current = { rise: date, peak: date, set: date, maxElevation: elevation, rangeKm: look.rangeSat, visible: false, riseAzimuth: look.azimuth * 180 / Math.PI, setAzimuth: look.azimuth * 180 / Math.PI };
       current.set = date;
       current.setAzimuth = look.azimuth * 180 / Math.PI;
-      if (elevation > current.maxElevation) {
+      // >=, not >: the first sample sets maxElevation, so a strict >
+      // never evaluates visibility for it — a one-sample pass stayed
+      // invisible even under a sunlit sky (issue #85). Re-running the
+      // check on a tied elevation is harmless: it recomputes the same
+      // sunlit/twilight test for the current minute.
+      if (elevation >= current.maxElevation) {
         current.peak = date;
         current.maxElevation = elevation;
         current.rangeKm = look.rangeSat;

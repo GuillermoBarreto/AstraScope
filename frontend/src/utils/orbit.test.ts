@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Satellite } from '@/types/satellite';
-import { compassDirection, orbitalMetrics, orbitalPeriodMinutes, satelliteGeodetic, satellitePosition, satelliteVelocityKmS, sunScenePosition } from '@/utils/orbit';
+import { compassDirection, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satellitePosition, satelliteVelocityKmS, sunScenePosition } from '@/utils/orbit';
 
 const iss: Satellite = {
   id: 'iss-25544', name: 'ISS', noradId: 25544, objectId: '1998-067A',
@@ -49,5 +49,23 @@ describe('SGP4 orbit utilities', () => {
     expect(compassDirection(0)).toBe('N');
     expect(compassDirection(225)).toBe('SW');
     expect(compassDirection(359)).toBe('N');
+  });
+});
+
+
+describe('predictPasses visibility', () => {
+  const observer = { latitude: 41.8781, longitude: -87.6298, altitudeKm: 0, label: 'Chicago, IL' };
+
+  it('marks a one-sample pass visible when the satellite is sunlit', () => {
+    // A pass clipped to a single sample: the window holds only the peak
+    // minute, so rise == set == peak. The peak is the first sample, and
+    // the visibility check used to run only when a sample beat the
+    // running maximum — the first sample never does, so a one-sample
+    // pass stayed invisible even under a sunlit sky (issue #85).
+    const peak = new Date('2026-08-02T17:04:00Z');
+    const passes = predictPasses(iss, observer, peak, 1 / 120);
+    expect(passes).toHaveLength(1);
+    expect(passes[0].rise.getTime()).toBe(passes[0].set.getTime());
+    expect(passes[0].visible).toBe(true);
   });
 });
