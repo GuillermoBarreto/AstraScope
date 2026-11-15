@@ -732,7 +732,10 @@ def _list_satellites_impl(
     if orbit and orbit.lower() != "all":
         satellites = [item for item in satellites if (item.get("orbit") or "").lower() == orbit.lower()]
     if search:
-        query = search.lower()
+        # Strip surrounding whitespace like filter_catalog_objects does:
+        # a pasted " iss " found nothing here while /catalog/search
+        # matched it, and casefold matches the catalog filter too.
+        query = search.casefold().strip()
         satellites = [
             item for item in satellites
             if query in (item.get("name") or "").lower() or query in str(item.get("noradId"))

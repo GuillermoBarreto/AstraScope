@@ -4,11 +4,12 @@ Images use Wikimedia Commons' stable file redirect service. Each record includes
 source page so the UI can expose provenance instead of guessing imagery by name.
 """
 
+import re
 from typing import Any
 
 
 METADATA_RULES: tuple[tuple[tuple[str, ...], dict[str, Any]], ...] = (
-    (("ISS", "ISS (ZARYA)"), {
+    (("ISS",), {
         "operator": "NASA / Roscosmos and partners",
         "description": "The International Space Station is a crewed research laboratory in low Earth orbit.",
         "launchDate": "1998-11-20",
@@ -55,11 +56,14 @@ METADATA_RULES: tuple[tuple[tuple[str, ...], dict[str, Any]], ...] = (
 
 
 def curated_metadata(name: str) -> dict[str, Any]:
-    upper = name.upper()
+    # Whole words only: the substring check handed ISS metadata to any
+    # name containing "ISS" — "DISMISS" and "MISSION-1" included
+    # (issue #45). Split on non-alphanumerics, the same way
+    # identify_purpose already does for the same reason; the bare
+    # "ISS" token covers "ISS (ZARYA)", so the phrase token is gone.
+    words = set(re.split(r"[^A-Z0-9]+", name.upper()))
     for tokens, metadata in METADATA_RULES:
-        # token in upper already covers exact and prefix matches, so no
-        # separate == / startswith conditions are needed.
-        if any(token in upper for token in tokens):
+        if any(token in words for token in tokens):
             return dict(metadata)
     return {}
 

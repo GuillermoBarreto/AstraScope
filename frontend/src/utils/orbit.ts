@@ -116,6 +116,14 @@ export function orbitalMetrics(satellite: Satellite, date = new Date()) {
   if (periodMinutes == null) {
     return { periodMinutes: null, perigeeKm: null, apogeeKm: null, speedKmS: null };
   }
+  // Eccentricity has to describe an ellipse: a hyperbolic (e >= 1),
+  // negative, or NaN value is bad provider data, and the formulas below
+  // turn it into a negative perigee or NaN apogee, which the details
+  // panel renders as-is and the camera follower feeds into a NaN orbit
+  // radius. Same nulls as the no-mean-motion case.
+  if (!Number.isFinite(satellite.eccentricity) || satellite.eccentricity < 0 || satellite.eccentricity >= 1) {
+    return { periodMinutes: null, perigeeKm: null, apogeeKm: null, speedKmS: null };
+  }
   const periodSeconds = periodMinutes * 60;
   const semiMajorAxisKm = Math.cbrt(EARTH_GRAVITATIONAL_PARAMETER * (periodSeconds / (2 * Math.PI)) ** 2);
   const altitude = satelliteGeodetic(satellite, date)?.altitude ?? semiMajorAxisKm - EARTH_RADIUS_KM;
