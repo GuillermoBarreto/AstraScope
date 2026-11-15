@@ -45,6 +45,18 @@ describe('SGP4 orbit utilities', () => {
     expect(metrics).toEqual({ periodMinutes: null, perigeeKm: null, apogeeKm: null, speedKmS: null });
   });
 
+  it('returns null metrics for impossible eccentricities', () => {
+    // A hyperbolic (e >= 1), negative, or NaN eccentricity is not an
+    // ellipse: the old code returned a negative perigee for e = 2 and
+    // NaN for e = NaN, which the details panel rendered as-is and the
+    // camera follower fed into a NaN orbit radius.
+    const date = new Date('2026-08-02T12:10:00Z');
+    const empty = { periodMinutes: null, perigeeKm: null, apogeeKm: null, speedKmS: null };
+    expect(orbitalMetrics({ ...iss, eccentricity: 2 }, date)).toEqual(empty);
+    expect(orbitalMetrics({ ...iss, eccentricity: Number.NaN }, date)).toEqual(empty);
+    expect(orbitalMetrics({ ...iss, eccentricity: -0.5 }, date)).toEqual(empty);
+  });
+
   it('formats pass azimuths as compass directions', () => {
     expect(compassDirection(0)).toBe('N');
     expect(compassDirection(225)).toBe('SW');
