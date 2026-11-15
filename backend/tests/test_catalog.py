@@ -128,6 +128,24 @@ def test_catalog_search_and_filters_use_supported_metadata() -> None:
     assert main.filter_catalog_objects(records, mode="all", object_type_filter="ROCKET_BODY")[0]["noradId"] == 45000
 
 
+def test_satellites_search_ignores_surrounding_whitespace(monkeypatch) -> None:
+    # A search pasted with surrounding spaces (" iss ") found nothing on
+    # /satellites while /catalog/search strips the query first. Strip it
+    # here too so both endpoints agree.
+    from datetime import datetime, timezone
+    fresh_stamp = datetime.now(timezone.utc).isoformat()
+    monkeypatch.setattr(
+        main, "read_disk_cache",
+        lambda: ([normalize_satcat(satcat_record())], fresh_stamp, "celestrak"),
+    )
+    monkeypatch.setattr(main, "last_failure_at", 0.0)
+
+    response = main.list_satellites(operator=None, orbit=None, search=" iss ")
+
+    assert response["total"] == 1
+    assert response["satellites"][0]["noradId"] == 25544
+
+
 def test_catalog_pagination_and_page_size_validation(monkeypatch) -> None:
     records = [normalize_satcat(satcat_record(NORAD_CAT_ID=str(1000 + index), OBJECT_NAME=f"OBJECT {index}")) for index in range(5)]
     monkeypatch.setattr(main, "public_catalog", lambda: (records, "2026-08-29T00:00:00Z", "cache", None))
