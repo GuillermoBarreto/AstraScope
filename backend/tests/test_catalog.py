@@ -203,6 +203,21 @@ def test_curated_metadata_has_trusted_media_provenance() -> None:
     assert iss["imageSourceUrl"].startswith("https://commons.wikimedia.org/")
 
 
+def test_curated_metadata_matches_whole_words_only() -> None:
+    # Issue #45: the substring check handed ISS metadata to any name
+    # containing "ISS" — "DISMISS" and "MISSION-1" included. Tokens must
+    # match as whole words, like identify_purpose already does.
+    assert curated_metadata("DISMISS") == {}
+    assert curated_metadata("MISSION-1") == {}
+    assert curated_metadata("STARLINK-1007")["description"].startswith("Starlink satellites")
+    assert curated_metadata("GOES-16")["description"].startswith("NOAA spacecraft")
+    assert curated_metadata("LANDSAT 8")["description"].startswith("Landsat spacecraft")
+    assert curated_metadata("SENTINEL-1A")["description"].startswith("Sentinel spacecraft")
+    assert curated_metadata("NOAA 19")["description"].startswith("NOAA spacecraft")
+    assert curated_metadata("GPS BIIR-5")["description"].startswith("GPS spacecraft")
+    assert curated_metadata("HUBBLE SPACE TELESCOPE")["description"].startswith("The Hubble Space Telescope")
+
+
 def test_unknown_spacecraft_is_not_enriched_with_guesses() -> None:
     assert curated_metadata("UNKNOWN PAYLOAD 42") == {}
 
