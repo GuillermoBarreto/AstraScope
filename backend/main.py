@@ -933,6 +933,39 @@ def catalog_orbits(
     }
 
 
+def _latest_timestamp(*stamps: str | None) -> str | None:
+    """Latest of several cache ``updatedAt`` strings, by instant not spelling.
+
+    max() over the raw strings mis-orders stamps that name the same instant
+    differently: "2026-11-15T15:00:00-05:00" is later than
+    "2026-11-15T19:30:00+00:00" but sorts first, and a "Z" suffix sorts
+    after fractional seconds at the same second. Cache files can be
+    hand-seeded, so parse them the way _cache_timestamp_age does (naive
+    means UTC) and compare instants, returning the winner's original
+    string. A stamp that won't parse loses to one that does; if none
+    parse, fall back to plain string order so a garbage stamp still
+    yields a deterministic answer instead of a 500.
+    """
+    parsed: list[tuple[datetime, str]] = []
+    unparsed: list[str] = []
+    for stamp in stamps:
+        if not stamp:
+            continue
+        try:
+            instant = datetime.fromisoformat(stamp)
+        except ValueError:
+            unparsed.append(stamp)
+            continue
+        if instant.tzinfo is None:
+            instant = instant.replace(tzinfo=timezone.utc)
+        parsed.append((instant, stamp))
+    if parsed:
+        return max(parsed, key=lambda item: item[0])[1]
+    if unparsed:
+        return max(unparsed)
+    return None
+
+
 @app.get("/catalog/providers")
 @app.get("/api/catalog/providers")
 def catalog_provider_status() -> dict[str, Any]:
@@ -947,7 +980,10 @@ def catalog_provider_status() -> dict[str, Any]:
         "celestrak": {
             "configured": True,
             "status": "healthy" if orbital_cache or metadata_cache else "not-synced",
-            "lastSuccess": max([value for value in (orbital_cache[1] if orbital_cache else None, metadata_cache[1] if metadata_cache else None) if value], default=None),
+            "lastSuccess": _latest_timestamp(
+                orbital_cache[1] if orbital_cache else None,
+                metadata_cache[1] if metadata_cache else None,
+            ),
         },
         "satnogs": {
             "configured": True,

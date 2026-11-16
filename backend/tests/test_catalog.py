@@ -566,6 +566,43 @@ def test_providers_satnogs_last_success_none_for_other_upstreams(monkeypatch) ->
     assert status["spaceTrack"]["lastSuccess"] == stamp
 
 
+def test_providers_celestrak_last_success_compares_instants_not_strings(monkeypatch) -> None:
+    # The two caches can carry the same instant spelled differently
+    # (hand-seeded files, a -05:00 offset instead of +00:00). max() over
+    # the raw strings picks "2026-11-15T19:30:00+00:00" here, but the
+    # orbital stamp names 20:00 UTC — half an hour later.
+    orbital_stamp = "2026-11-15T15:00:00-05:00"
+    catalog_stamp = "2026-11-15T19:30:00+00:00"
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], orbital_stamp, "celestrak")
+    )
+    monkeypatch.setattr(
+        main, "read_public_catalog_cache", lambda: ([{"noradId": 25544}], catalog_stamp)
+    )
+
+    status = main.catalog_provider_status()
+
+    assert status["celestrak"]["lastSuccess"] == orbital_stamp
+
+
+def test_providers_celestrak_last_success_z_suffix_vs_fractional_seconds(monkeypatch) -> None:
+    # Same second, different spellings: "Z" sorts after "." so string max
+    # picks the Z stamp, but the fractional-seconds stamp is half a second
+    # later.
+    orbital_stamp = "2026-11-15T20:00:00Z"
+    catalog_stamp = "2026-11-15T20:00:00.500000+00:00"
+    monkeypatch.setattr(
+        main, "read_disk_cache", lambda: ([{"noradId": 25544}], orbital_stamp, "celestrak")
+    )
+    monkeypatch.setattr(
+        main, "read_public_catalog_cache", lambda: ([{"noradId": 25544}], catalog_stamp)
+    )
+
+    status = main.catalog_provider_status()
+
+    assert status["celestrak"]["lastSuccess"] == catalog_stamp
+
+
 def test_catalog_orbits_does_not_trip_satellites_retry_gate(monkeypatch) -> None:
     # Issue #49: catalog_orbits fans out through list_satellites' fetch path,
     # so a failed upstream sync there must not arm the /satellites retry gate.
