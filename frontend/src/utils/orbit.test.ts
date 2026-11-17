@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Satellite } from '@/types/satellite';
-import { compassDirection, groundTrack, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satellitePosition, satelliteVelocityKmS, sunScenePosition } from '@/utils/orbit';
+import { compassDirection, footprintPoints, groundTrack, orbitalMetrics, orbitalPeriodMinutes, predictPasses, satelliteGeodetic, satellitePosition, satelliteVelocityKmS, sunScenePosition } from '@/utils/orbit';
 
 const iss: Satellite = {
   id: 'iss-25544', name: 'ISS', noradId: 25544, objectId: '1998-067A',
@@ -92,6 +92,21 @@ describe('groundTrack failures', () => {
     const noTle = { ...iss, tle1: undefined, tle2: undefined, eccentricity: 2 };
     const points = groundTrack(noTle, new Date('2026-08-02T12:10:00Z'));
     expect(points).toEqual([]);
+  });
+});
+
+describe('non-finite propagations', () => {
+  it('treats NaN coordinates from the propagator as a failed propagation', () => {
+    // propagate() returns NaN coordinates instead of failing when an
+    // element is non-finite, and those NaNs used to reach footprintPoints
+    // (issue #98), groundTrack, and the scene position. Without TLEs, so
+    // the elements — not the TLE — feed the propagator.
+    const bad = { ...iss, tle1: undefined, tle2: undefined, inclination: Number.NaN };
+    const date = new Date('2026-08-02T12:10:00Z');
+    expect(satelliteGeodetic(bad, date)).toBeNull();
+    expect(footprintPoints(bad, date)).toEqual([]);
+    expect(groundTrack(bad, date)).toEqual([]);
+    expect(satellitePosition(bad, date).every(Number.isFinite)).toBe(true);
   });
 });
 
