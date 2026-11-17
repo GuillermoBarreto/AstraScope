@@ -60,6 +60,17 @@ def test_normalize_neo_rejects_non_list_approaches() -> None:
     assert normalize_neo(payload) is None
 
 
+def test_normalize_neo_hazard_flag_needs_a_real_boolean() -> None:
+    # bool("false") is True, so a string-valued flag from upstream used to
+    # mark an asteroid hazardous. Only a real JSON true counts.
+    item = normalize_neo(_payload(is_potentially_hazardous_asteroid="false"))
+    assert item is not None
+    assert item.potentiallyHazardous is False
+    item = normalize_neo(_payload(is_potentially_hazardous_asteroid=True))
+    assert item is not None
+    assert item.potentiallyHazardous is True
+
+
 def test_key_fingerprint_is_stable_and_hides_the_key() -> None:
     fingerprint = neo_service._key_fingerprint("secret-key")
     assert fingerprint == neo_service._key_fingerprint("secret-key")
