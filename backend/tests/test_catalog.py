@@ -45,6 +45,15 @@ def test_tle_epoch_rejects_impossible_day() -> None:
     assert tle_epoch("26001.5").startswith("2026-01-01")
 
 
+def test_tle_epoch_rejects_day_366_in_a_non_leap_year() -> None:
+    # 2026 has 365 days: day 366 used to roll into 2027-01-01 instead of
+    # being rejected, stamping the record with the wrong year.
+    with pytest.raises(ValueError):
+        tle_epoch("26366.5")
+    assert tle_epoch("24366.5").startswith("2024-12-31")
+    assert tle_epoch("26365.5").startswith("2026-12-31")
+
+
 def test_normalize_satnogs_tle() -> None:
     satellite = normalize_satnogs(ISS)
     assert satellite["noradId"] == 25544

@@ -1,3 +1,4 @@
+import calendar
 import json
 import logging
 import re
@@ -310,7 +311,11 @@ def tle_epoch(value: str) -> str:
     year = _tle_int(value[:2])
     full_year = 2000 + year if year < TLE_YEAR_PIVOT else 1900 + year
     day = _tle_float(value[2:])
-    if not 1 <= day < 367:
+    # Day 366 only exists in a leap year: the old 1..366 range let a
+    # non-leap-year epoch roll into Jan 1 of the next year, stamping the
+    # record with a plausible-looking but wrong date.
+    days_in_year = 366 if calendar.isleap(full_year) else 365
+    if not 1 <= day < days_in_year + 1:
         # A garbage day-of-year used to reach fromtimestamp, where a huge
         # value raised OSError (not ValueError) and killed the whole
         # SatNOGS sync instead of skipping that one record; a negative
