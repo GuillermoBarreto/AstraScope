@@ -62,13 +62,18 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     # too, and the fallback chain runs on the cleaned values only.
     raw_id = optional_str(entry.get("id")) or optional_str(entry.get("neo_reference_id"))
     raw_name = optional_str(entry.get("name"))
+    # Only a real JSON true counts as hazardous: bool("false") is True,
+    # so a string-valued flag from upstream used to mark an asteroid
+    # hazardous. Same stance as optional_str/optional_float — a value of
+    # the wrong type is absent, not coerced.
+    raw_hazardous = entry.get("is_potentially_hazardous_asteroid")
     return NearEarthObject(
         id=raw_id or raw_name or approach_date,
         name=raw_name or "Unnamed object",
         nasaJplUrl=optional_str(entry.get("nasa_jpl_url")),
         estimatedDiameterMinKm=optional_float(diameter.get("estimated_diameter_min")),
         estimatedDiameterMaxKm=optional_float(diameter.get("estimated_diameter_max")),
-        potentiallyHazardous=bool(entry.get("is_potentially_hazardous_asteroid", False)),
+        potentiallyHazardous=raw_hazardous is True,
         closeApproachDate=approach_date,
         closeApproachDateTime=optional_str(approach.get("close_approach_date_full")),
         relativeVelocityKmS=optional_float(velocity.get("kilometers_per_second")),

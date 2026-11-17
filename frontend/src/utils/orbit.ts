@@ -63,6 +63,11 @@ function getSatrec(satellite: Satellite) {
 function state(satellite: Satellite, date: Date) {
   const result = propagate(getSatrec(satellite), date);
   if (!result || typeof result.position === 'boolean') return null;
+  // propagate() hands back NaN coordinates instead of failing when an
+  // element is non-finite, and those NaNs used to flow into footprint
+  // points, ground tracks, and scene positions (issue #98). Treat them
+  // as a failed propagation like the boolean case.
+  if (!Number.isFinite(result.position.x) || !Number.isFinite(result.position.y) || !Number.isFinite(result.position.z)) return null;
   const gmst = gstime(date);
   return { positionEci: result.position, positionEcf: eciToEcf(result.position, gmst), velocityEci: result.velocity, gmst };
 }
