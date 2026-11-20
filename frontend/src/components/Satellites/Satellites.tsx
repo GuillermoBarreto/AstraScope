@@ -24,10 +24,23 @@ export function Satellites({ satellites, selectedId, onSelect, time }: Satellite
     const hitMesh = hitMeshRef.current;
     if (!mesh || !hitMesh) return;
     satellites.forEach((satellite, index) => {
-      const [x, y, z] = satellitePosition(satellite, time);
-      dummy.position.set(x, y, z);
+      const position = satellitePosition(satellite, time);
       const selected = index === selectedIndex;
       const hovered = index === hoveredIndex;
+      if (position === null) {
+        // A failed propagation has no place in the scene: collapse the
+        // marker and its hit target instead of parking them at the
+        // center of the earth (issue #96). The satellite stays in the
+        // list — only its scene marker goes away.
+        dummy.position.set(0, 0, 0);
+        dummy.scale.setScalar(0);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(index, dummy.matrix);
+        hitMesh.setMatrixAt(index, dummy.matrix);
+        return;
+      }
+      const [x, y, z] = position;
+      dummy.position.set(x, y, z);
       dummy.scale.setScalar(selected ? 2.15 : hovered ? 1.6 : 1);
       dummy.updateMatrix();
       mesh.setMatrixAt(index, dummy.matrix);
@@ -62,6 +75,11 @@ export function Satellites({ satellites, selectedId, onSelect, time }: Satellite
     if (event.instanceId !== undefined) onSelect(satellites[event.instanceId].id);
   };
 
+  const hoveredPosition =
+    hoveredIndex !== null && satellites[hoveredIndex]
+      ? satellitePosition(satellites[hoveredIndex], time)
+      : null;
+
   return (
     <group>
       <instancedMesh ref={meshRef} args={[undefined, undefined, satellites.length]} raycast={() => null}>
@@ -78,8 +96,8 @@ export function Satellites({ satellites, selectedId, onSelect, time }: Satellite
         <sphereGeometry args={[0.07, 8, 8]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </instancedMesh>
-      {hoveredIndex !== null && satellites[hoveredIndex] && (
-        <mesh position={satellitePosition(satellites[hoveredIndex], time)} raycast={() => null}>
+      {hoveredPosition && (
+        <mesh position={hoveredPosition} raycast={() => null}>
           <sphereGeometry args={[0.035, 12, 12]} />
           <meshBasicMaterial color="#67e8f9" transparent opacity={0.7} wireframe depthWrite={false} />
         </mesh>

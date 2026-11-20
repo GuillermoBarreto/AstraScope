@@ -28,7 +28,11 @@ describe('copyText', () => {
 
   it('pins the fallback textarea to the viewport corner', async () => {
     vi.stubGlobal('navigator', {});
-    let seen: HTMLTextAreaElement | null = null;
+    // The cast on the initializer keeps the declared union type: a bare
+    // `= null` narrows `seen` to null (the mock's assignment inside the
+    // callback is invisible to control-flow analysis), so `seen?.style`
+    // below would read `.style` off `never`.
+    let seen: HTMLTextAreaElement | null = null as HTMLTextAreaElement | null;
     const execCommand = vi.fn().mockImplementation(() => {
       // Capture the element while it is still in the document: the
       // fallback removes it in a finally block.
