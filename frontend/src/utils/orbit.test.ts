@@ -34,6 +34,11 @@ describe('SGP4 orbit utilities', () => {
     expect(metrics.periodMinutes).toBeGreaterThan(90);
     expect(metrics.periodMinutes).toBeLessThan(100);
     expect(metrics.speedKmS).toBeGreaterThan(7);
+    // apogeeKm/perigeeKm are number | null; the comparison needs both
+    // finite, so narrow them first instead of asserting past the null.
+    if (metrics.apogeeKm === null || metrics.perigeeKm === null) {
+      throw new Error('expected finite apogee and perigee for the ISS');
+    }
     expect(metrics.apogeeKm).toBeGreaterThan(metrics.perigeeKm);
     expect(orbitalPeriodMinutes(iss.meanMotion)).toBeCloseTo(92.94, 1);
     expect(orbitalPeriodMinutes(0)).toBeNull();
