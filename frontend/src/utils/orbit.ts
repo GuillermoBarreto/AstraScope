@@ -72,9 +72,12 @@ function state(satellite: Satellite, date: Date) {
   return { positionEci: result.position, positionEcf: eciToEcf(result.position, gmst), velocityEci: result.velocity, gmst };
 }
 
-export function satellitePosition(satellite: Satellite, date: Date): [number, number, number] {
+export function satellitePosition(satellite: Satellite, date: Date): [number, number, number] | null {
   const result = state(satellite, date);
-  if (!result) return [0, 0, 0];
+  // A failed propagation has no position: null, not the center of the
+  // earth — [0, 0, 0] used to park unplaceable satellites inside the
+  // planet, where they read as real (issue #96).
+  if (!result) return null;
   const scale = EARTH_SCENE_RADIUS / EARTH_RADIUS_KM;
   return [result.positionEcf.x * scale, result.positionEcf.z * scale, -result.positionEcf.y * scale];
 }
