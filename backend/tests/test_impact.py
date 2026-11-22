@@ -208,6 +208,31 @@ def test_fireball_days_clamped_before_cache_key(monkeypatch) -> None:
     assert len(calls) == 1
 
 
+def test_fetch_fireballs_caps_days_at_one_year(monkeypatch) -> None:
+    # Issue #101: the service caps the window at a year, so a huge days
+    # value asks CNEOS for one year back instead of a decade of rows.
+    from datetime import date, datetime, timezone
+    from urllib.parse import parse_qs, urlparse
+
+    calls = []
+
+    def fake_urlopen(*args, **kwargs):
+        calls.append(args)
+        return _FakeJsonResponse(json.dumps(_fireball_payload(1)).encode())
+
+    monkeypatch.setattr(fireball_service, "urlopen", fake_urlopen)
+    fireball_service._fetch_fireballs_cached.cache_clear()
+    try:
+        items = fireball_service.fetch_fireballs(4000, 12345)
+    finally:
+        fireball_service._fetch_fireballs_cached.cache_clear()
+    assert len(items) == 1
+    assert len(calls) == 1
+    query = parse_qs(urlparse(calls[0][0].full_url).query)
+    start = date.fromisoformat(query["date-min"][0])
+    assert (datetime.now(timezone.utc).date() - start).days == 365
+
+
 def test_fireball_non_dict_payload_returns_structured_error(monkeypatch) -> None:
     # A non-object JPL payload is malformed data: it must surface as the
     # generic upstream error, not as a successful sync with zero fireballs.

@@ -12,6 +12,10 @@ from ..core.parsing import optional_float
 from ..models.impact import Fireball
 
 FIREBALL_URL = "https://ssd-api.jpl.nasa.gov/fireball.api"
+# CNEOS answers any window, but a multi-year one pulls and normalizes
+# every row in memory before the API filters it. Cap at a year (issue
+# #101) so a stray days value can't turn one request into a huge sync.
+MAX_FIREBALL_DAYS = 365
 
 # Trailing timezone designator on an upstream timestamp: "Z" or a numeric
 # offset with an optional colon and an optional minute component ("+00:00",
@@ -103,9 +107,10 @@ def fetch_fireballs(days: int, cache_window: int) -> list[Fireball]:
 
     The day count is clamped before the cache key is built, so days=0 and
     days=1 share a single cache entry instead of duplicating identical
-    upstream requests (mirrors fetch_neos in neo_service).
+    upstream requests (mirrors fetch_neos in neo_service). Above a year
+    the window is capped (see MAX_FIREBALL_DAYS).
     """
-    return _fetch_fireballs_cached(max(1, days), cache_window)
+    return _fetch_fireballs_cached(min(max(1, days), MAX_FIREBALL_DAYS), cache_window)
 
 
 @lru_cache(maxsize=32)
