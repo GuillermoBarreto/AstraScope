@@ -275,3 +275,47 @@ def test_normalize_neo_skips_unparseable_dates() -> None:
     item = normalize_neo(payload)
     assert item is not None
     assert item.closeApproachDate == "2026-08-08"
+
+
+def test_fetch_neos_caps_days_at_nasa_seven_day_max(monkeypatch) -> None:
+    # Issue #101: NASA's feed endpoint rejects windows over 7 days, so
+    # the service clamps the window instead of asking for a range
+    # upstream will answer with a 400.
+    import backend.app.core.config as config_module
+    import json
+    from datetime import date
+    from urllib.parse import parse_qs, urlparse
+
+    class FakeSettings:
+        nasa_api_key = "test-key"
+
+    class FakeResponse:
+        def __init__(self, data):
+            self._data = data
+
+        def read(self):
+            return self._data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    seen = {}
+
+    def fake_urlopen(request, *args, **kwargs):
+        seen["url"] = request.full_url
+        return FakeResponse(json.dumps({"near_earth_objects": {}}).encode())
+
+    monkeypatch.setattr(config_module, "settings", FakeSettings())
+    monkeypatch.setattr(neo_service, "urlopen", fake_urlopen)
+    neo_service._fetch_neos_cached.cache_clear()
+    try:
+        assert neo_service.fetch_neos(30, "test-key", 1) == []
+    finally:
+        neo_service._fetch_neos_cached.cache_clear()
+    query = parse_qs(urlparse(seen["url"]).query)
+    start = date.fromisoformat(query["start_date"][0])
+    end = date.fromisoformat(query["end_date"][0])
+    assert (end - start).days == 6
