@@ -44,7 +44,10 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     timestamp = timestamp.strip()
     if not timestamp:
         return None
-    date_time = timestamp.replace(" ", "T")
+    # Replace only the first space: a stamp with a space before its
+    # offset ("... 01:02:03 +00:00") used to become "...T01:02:03T+00:00"
+    # and the whole row was dropped as garbage (issue #102).
+    date_time = timestamp.replace(" ", "T", 1)
     if not TZ_SUFFIX.search(date_time):
         date_time += "Z"
     try:
@@ -73,7 +76,9 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     # TZ_SUFFIX pattern used for the Z-append check above: a designator that
     # survived that check (any TZ_SUFFIX form) must never leak into the id,
     # or ids silently drift whenever the upstream format changes.
-    slug = TZ_SUFFIX.sub("", date_time).replace(":", "-")
+    # Strip the slug: a space before the offset leaves one behind once the
+    # designator is removed ("...T01:02:03 "), and the id is a dedup key.
+    slug = TZ_SUFFIX.sub("", date_time).replace(":", "-").strip()
     # Round the coordinate suffix to 3 decimals (~100 m) and use abs() so a
     # negative latitude/longitude cannot render as a double dash
     # ("--10.0--20.0"). The id is a stable dedup key: raw float precision from

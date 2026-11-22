@@ -239,6 +239,20 @@ def test_fireball_normalization_does_not_double_stamp_timezone() -> None:
     assert item.dateTime == "2026-08-01T01:02:03Z"
 
 
+def test_fireball_timestamp_with_spaced_offset_keeps_the_offset() -> None:
+    # Issue #102: the timestamp used to have every space replaced with
+    # "T", so a stamp with a space before its offset
+    # ("... 01:02:03 +00:00") became "...T01:02:03T+00:00" and the row
+    # was dropped as garbage. Only the date/time separator is replaced
+    # now, so the offset survives and the id matches the other notations
+    # of the same instant.
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    item = normalize_fireball(fields, ["2026-08-01 01:02:03 +00:00", "10", "N", "20", "E", "30", "2.5", "0.1", "3", "4", "0"])
+    assert item is not None
+    assert item.dateTime == "2026-08-01T01:02:03 +00:00"
+    assert item.id == "2026-08-01T01-02-03-10.0-20.0"
+
+
 def test_fireball_id_derives_from_normalized_datetime() -> None:
     # The id slug must come from the already-normalized dateTime, not the raw
     # upstream stamp: a bare "Z" designator must not leak into the id, and
