@@ -11,6 +11,10 @@ from ..core.parsing import optional_float, optional_str
 from ..models.impact import NearEarthObject
 
 NEOWS_URL = "https://api.nasa.gov/neo/rest/v1/feed"
+# NASA's feed endpoint only accepts windows up to 7 days: anything wider
+# comes back a 400. Clamp here (issue #101) so a non-API caller gets the
+# same guard the API layer already applies, instead of an upstream error.
+MAX_NEOS_DAYS = 7
 def _as_dict(value: Any) -> dict[str, Any]:
     """Return ``value`` when it is a dict, else an empty dict.
 
@@ -99,8 +103,9 @@ def fetch_neos(days: int, api_key: str, cache_window: int) -> list[NearEarthObje
     key itself, so the secret is never retained in the cache's argument tuples.
     """
     # A day count below 1 would push the end date before the start date and
-    # ask NASA for an inverted range, so clamp it.
-    return _fetch_neos_cached(max(1, days), _key_fingerprint(api_key), cache_window)
+    # ask NASA for an inverted range, so clamp it; above 7 days NASA
+    # rejects the window outright (see MAX_NEOS_DAYS).
+    return _fetch_neos_cached(min(max(1, days), MAX_NEOS_DAYS), _key_fingerprint(api_key), cache_window)
 
 
 @lru_cache(maxsize=32)

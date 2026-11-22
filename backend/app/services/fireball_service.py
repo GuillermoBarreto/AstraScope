@@ -12,6 +12,10 @@ from ..core.parsing import optional_float
 from ..models.impact import Fireball
 
 FIREBALL_URL = "https://ssd-api.jpl.nasa.gov/fireball.api"
+# CNEOS answers any window, but a multi-year one pulls and normalizes
+# every row in memory before the API filters it. Cap at a year (issue
+# #101) so a stray days value can't turn one request into a huge sync.
+MAX_FIREBALL_DAYS = 365
 
 # Trailing timezone designator on an upstream timestamp: "Z" or a numeric
 # offset with an optional colon and an optional minute component ("+00:00",
@@ -44,7 +48,10 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     timestamp = timestamp.strip()
     if not timestamp:
         return None
-    date_time = timestamp.replace(" ", "T")
+    # Replace only the first space: a stamp with a space before its
+    # offset ("... 01:02:03 +00:00") used to become "...T01:02:03T+00:00"
+    # and the whole row was dropped as garbage (issue #102).
+    date_time = timestamp.replace(" ", "T", 1)
     if not TZ_SUFFIX.search(date_time):
         date_time += "Z"
     try:
@@ -73,7 +80,9 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     # TZ_SUFFIX pattern used for the Z-append check above: a designator that
     # survived that check (any TZ_SUFFIX form) must never leak into the id,
     # or ids silently drift whenever the upstream format changes.
-    slug = TZ_SUFFIX.sub("", date_time).replace(":", "-")
+    # Strip the slug: a space before the offset leaves one behind once the
+    # designator is removed ("...T01:02:03 "), and the id is a dedup key.
+    slug = TZ_SUFFIX.sub("", date_time).replace(":", "-").strip()
     # Round the coordinate suffix to 3 decimals (~100 m) and use abs() so a
     # negative latitude/longitude cannot render as a double dash
     # ("--10.0--20.0"). The id is a stable dedup key: raw float precision from
@@ -98,9 +107,10 @@ def fetch_fireballs(days: int, cache_window: int) -> list[Fireball]:
 
     The day count is clamped before the cache key is built, so days=0 and
     days=1 share a single cache entry instead of duplicating identical
-    upstream requests (mirrors fetch_neos in neo_service).
+    upstream requests (mirrors fetch_neos in neo_service). Above a year
+    the window is capped (see MAX_FIREBALL_DAYS).
     """
-    return _fetch_fireballs_cached(max(1, days), cache_window)
+    return _fetch_fireballs_cached(min(max(1, days), MAX_FIREBALL_DAYS), cache_window)
 
 
 @lru_cache(maxsize=32)
