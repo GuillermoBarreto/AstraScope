@@ -189,18 +189,38 @@ def test_optional_float_rejects_booleans() -> None:
 def test_normalize_neo_treats_non_string_id_and_name_as_absent() -> None:
     # Issue #69, continued: a dict id / list name used to be str()-coerced
     # into garbage ("{...}") instead of treated as absent, so the fallback
-    # chain never ran. Non-string ids fall back to the reference id, then
-    # the name, then the approach date; a non-string name falls back to
-    # "Unnamed object".
+    # chain never ran. Non-string ids fall back to the reference id; a
+    # non-string name falls back to "Unnamed object". With no usable id
+    # and no usable name there is nothing to key the record on (issue
+    # #104), so it is skipped instead of served under a date id.
     payload = _payload(id={"not": "an id"}, neo_reference_id=12345, name=["weird"])
-    item = normalize_neo(payload)
-    assert item is not None
-    assert item.id == "2026-08-08"
-    assert item.name == "Unnamed object"
+    assert normalize_neo(payload) is None
     payload = _payload(id=["nope"], neo_reference_id="ref-9", name="(2010 PK9)")
     item = normalize_neo(payload)
     assert item is not None
     assert item.id == "ref-9"
+
+
+def test_normalize_neo_id_falls_back_to_name_and_date() -> None:
+    # Issue #104: an id-less object with a name keeps a stable, unique
+    # id built from the name and its approach date, instead of the bare
+    # date every id-less object on that date used to share.
+    payload = _payload()
+    del payload["id"]
+    item = normalize_neo(payload)
+    assert item is not None
+    assert item.id == "(2010 PK9)-2026-08-08"
+
+
+def test_normalize_neo_skips_id_less_unnamed_objects() -> None:
+    # Issue #104: two id-less, unnamed objects approaching on the same
+    # date used to collide on the bare approach date as their id. With
+    # neither an id nor a name there is nothing to key on, so the
+    # record is skipped.
+    payload = _payload()
+    del payload["id"]
+    del payload["name"]
+    assert normalize_neo(payload) is None
 
 
 def test_normalize_neo_uses_earliest_approach_not_first() -> None:

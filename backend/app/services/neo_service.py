@@ -66,13 +66,25 @@ def normalize_neo(entry: dict[str, Any]) -> NearEarthObject | None:
     # too, and the fallback chain runs on the cleaned values only.
     raw_id = optional_str(entry.get("id")) or optional_str(entry.get("neo_reference_id"))
     raw_name = optional_str(entry.get("name"))
+    # The id is a dedup key, so it has to identify the object, not the
+    # approach: falling back to the bare approach date gave every id-less,
+    # unnamed object on the same date the same id (issue #104). A name
+    # still identifies the object when combined with its date; with
+    # neither an id nor a name there is nothing to key on, so the record
+    # is skipped instead of served under a colliding date id.
+    if raw_id:
+        neo_id = raw_id
+    elif raw_name:
+        neo_id = f"{raw_name}-{approach_date}"
+    else:
+        return None
     # Only a real JSON true counts as hazardous: bool("false") is True,
     # so a string-valued flag from upstream used to mark an asteroid
     # hazardous. Same stance as optional_str/optional_float — a value of
     # the wrong type is absent, not coerced.
     raw_hazardous = entry.get("is_potentially_hazardous_asteroid")
     return NearEarthObject(
-        id=raw_id or raw_name or approach_date,
+        id=neo_id,
         name=raw_name or "Unnamed object",
         nasaJplUrl=optional_str(entry.get("nasa_jpl_url")),
         estimatedDiameterMinKm=optional_float(diameter.get("estimated_diameter_min")),
