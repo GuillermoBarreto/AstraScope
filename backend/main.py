@@ -187,10 +187,13 @@ def _gp_int(value: Any) -> int:
 
 
 def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict[str, Any]:
-    # The missing-key defaults below used to be bypassed by an explicit
-    # null: str(None) is the literal "None", so a null OBJECT_NAME
-    # produced a satellite literally named "None".
-    name = str(entry.get("OBJECT_NAME") or "Unknown satellite")
+    # A missing key used to be bypassed by an explicit null: str(None)
+    # is the literal "None", so a null OBJECT_NAME produced a satellite
+    # literally named "None". A non-string value is the same story —
+    # str() on a dict/list makes a "{...}" garbage name — so a value of
+    # the wrong type is absent here too, like optional_str already does
+    # for the NeoWs normalizer (issue #69 family).
+    name = optional_str(entry.get("OBJECT_NAME")) or "Unknown satellite"
     norad_id = _gp_int(entry.get("NORAD_CAT_ID"))
     # A missing/zero mean motion must not fall through to 1.0: orbit_class()
     # maps 1.0 to GEO, which would mislabel records with no orbital data.
@@ -201,8 +204,8 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
         "id": f"{slug}-{norad_id}",
         "name": name,
         "noradId": norad_id,
-        "objectId": str(entry.get("OBJECT_ID") or "unknown"),
-        "epoch": str(entry.get("EPOCH") or ""),
+        "objectId": optional_str(entry.get("OBJECT_ID")) or "unknown",
+        "epoch": optional_str(entry.get("EPOCH")) or "",
         "inclination": _gp_float(entry.get("INCLINATION")),
         "raan": _gp_float(entry.get("RA_OF_ASC_NODE")),
         "eccentricity": _gp_float(entry.get("ECCENTRICITY")),
@@ -216,12 +219,12 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
         "operator": identify_operator(name),
         "orbit": orbit_class(mean_motion),
         "purpose": identify_purpose(name),
-        "countryCode": str(entry.get("COUNTRY_CODE") or "Unknown"),
-        "internationalDesignator": str(entry.get("OBJECT_ID") or "") or None,
+        "countryCode": optional_str(entry.get("COUNTRY_CODE")) or "Unknown",
+        "internationalDesignator": optional_str(entry.get("OBJECT_ID")) or None,
         "objectType": object_type(entry.get("OBJECT_TYPE", "PAYLOAD")),
         "operationalStatus": operational_status(entry.get("OPS_STATUS_CODE"), entry.get("DECAY_DATE")),
         "hasOrbitalData": True,
-        "orbitalDataUpdatedAt": str(entry.get("EPOCH") or ""),
+        "orbitalDataUpdatedAt": optional_str(entry.get("EPOCH")) or "",
         "dataSources": {"orbit": orbit_source},
         "dataQuality": "provider-supplied",
     })

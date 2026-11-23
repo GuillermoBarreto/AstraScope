@@ -707,6 +707,30 @@ def test_gp_normalization_null_fields_use_fallbacks_not_none_string() -> None:
     assert "None" not in item["id"]
 
 
+def test_gp_normalization_treats_non_string_fields_as_absent() -> None:
+    # Same family as the null fallbacks above and issue #69: a dict
+    # OBJECT_NAME used to be str()-coerced into a satellite literally
+    # named "{'weird': 'dict'}", with a matching garbage slug id, and a
+    # list OBJECT_ID became "['x']". Non-string values are absent, not
+    # coerced, so the record keeps its fallbacks.
+    item = normalize({
+        "OBJECT_NAME": {"weird": "dict"},
+        "OBJECT_ID": ["x"],
+        "NORAD_CAT_ID": 25544,
+        "EPOCH": {"epoch": "2026-01-01"},
+        "COUNTRY_CODE": ["US"],
+        "MEAN_MOTION": 15.5,
+        "OBJECT_TYPE": "PAYLOAD",
+    })
+    assert item["name"] == "Unknown satellite"
+    assert item["objectId"] == "unknown"
+    assert item["epoch"] == ""
+    assert item["countryCode"] == "Unknown"
+    assert item["internationalDesignator"] is None
+    assert item["orbitalDataUpdatedAt"] == ""
+    assert item["id"] == "unknown-satellite-25544"
+
+
 def test_normalize_rejects_non_finite_and_garbage_floats() -> None:
     # Issue #73: normalize() called float() directly, so "inf"/"nan"
     # sailed into the catalog (breaking JSON output and numeric filters)
