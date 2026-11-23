@@ -65,6 +65,13 @@ def test_normalize_satnogs_tle() -> None:
     assert satellite["dataSources"]["orbit"] == "satnogs"
 
 
+def test_normalize_satnogs_treats_non_string_name_as_absent() -> None:
+    # a dict tle0 used to become a "{...}" literal satellite name; a
+    # wrong-typed value is absent, like the GP/satcat normalizers do
+    satellite = normalize_satnogs({**ISS, "tle0": {"name": "ISS"}})
+    assert satellite["name"] == "Unknown satellite"
+
+
 def satcat_record(**overrides):
     record = {
         "OBJECT_NAME": "ISS (ZARYA)",
