@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import sys
 import time
 from urllib.error import URLError
 
@@ -255,6 +256,19 @@ def test_api_root_identifies_service() -> None:
 
 def test_health_check_identifies_service() -> None:
     assert health_check()["service"] == "astrascope-backend"
+
+
+def test_main_uses_the_canonical_impact_module() -> None:
+    # Issue #88: main.py used to try the top-level `app` package first,
+    # so running pytest from backend/ loaded a second copy of the impact
+    # module and the tests' monkeypatches missed it — the endpoints hit
+    # live upstream data instead of the fakes. The canonical backend.app
+    # copy must be the one main uses, and no second copy may load.
+    import backend.app.api.impact as impact_api
+
+    assert main.impact_router is impact_api.router
+    assert "app.api.impact" not in sys.modules
+    assert "app.core.config" not in sys.modules
 
 
 def test_cors_origins_are_comma_separated() -> None:

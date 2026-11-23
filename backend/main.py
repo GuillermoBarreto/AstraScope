@@ -19,20 +19,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 try:
-    from app.api.impact import router as impact_router
-except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports repository-root imports
     from backend.app.api.impact import router as impact_router
+except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct module execution
+    from app.api.impact import router as impact_router
 
 try:
-    from app.core.config import settings
-    from app.core.http import USER_AGENT, tls_context
-    from app.core.parsing import optional_float
-    from app.data.satellite_metadata import enrich_satellite
-except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct module execution
     from backend.app.core.config import settings
     from backend.app.core.http import USER_AGENT, tls_context
-    from backend.app.core.parsing import optional_float
+    from backend.app.core.parsing import optional_float, optional_str
     from backend.app.data.satellite_metadata import enrich_satellite
+except (ModuleNotFoundError, ImportError):  # pragma: no cover - supports direct module execution
+    from app.core.config import settings
+    from app.core.http import USER_AGENT, tls_context
+    from app.core.parsing import optional_float, optional_str
+    from app.data.satellite_metadata import enrich_satellite
 
 logger = logging.getLogger(__name__)
 
