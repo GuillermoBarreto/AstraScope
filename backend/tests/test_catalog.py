@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import sys
 import time
 from urllib.error import URLError
 
@@ -64,6 +65,13 @@ def test_normalize_satnogs_tle() -> None:
     assert satellite["dataSources"]["orbit"] == "satnogs"
 
 
+def test_normalize_satnogs_treats_non_string_name_as_absent() -> None:
+    # a dict tle0 used to become a "{...}" literal satellite name; a
+    # wrong-typed value is absent, like the GP/satcat normalizers do
+    satellite = normalize_satnogs({**ISS, "tle0": {"name": "ISS"}})
+    assert satellite["name"] == "Unknown satellite"
+
+
 def satcat_record(**overrides):
     record = {
         "OBJECT_NAME": "ISS (ZARYA)",
@@ -93,6 +101,31 @@ def test_normalize_celestrak_satcat_with_provenance() -> None:
     assert item["objectType"] == "PAYLOAD"
     assert item["operationalStatus"] == "ACTIVE"
     assert item["dataSources"] == {"catalog": "celestrak-satcat"}
+
+
+def test_normalize_satcat_treats_non_string_fields_as_absent() -> None:
+    # Same family as the GP normalizer: a dict OBJECT_NAME used to be
+    # str()-coerced into a catalog entry literally named
+    # "{'weird': 'dict'}", and a list OWNER into "['US']". Non-string
+    # values are absent, not coerced, so the record keeps its fallbacks.
+    item = normalize_satcat(satcat_record(
+        OBJECT_NAME={"weird": "dict"},
+        OBJECT_ID=["1998-067A"],
+        OWNER=["US"],
+        LAUNCH_DATE={"date": "1998-11-20"},
+        LAUNCH_SITE=12345,
+        DECAY_DATE=["2020-01-01"],
+        DATA_STATUS_CODE={"code": "x"},
+    ))
+    assert item["name"] == "Unknown object"
+    assert item["internationalDesignator"] is None
+    assert item["countryCode"] is None
+    assert item["owner"] is None
+    assert item["launchDate"] is None
+    assert item["launchSite"] is None
+    assert item["decayDate"] is None
+    assert item["dataStatus"] is None
+    assert item["operationalStatus"] == "ACTIVE"
 
 
 def test_object_type_and_status_classification() -> None:
@@ -255,6 +288,19 @@ def test_api_root_identifies_service() -> None:
 
 def test_health_check_identifies_service() -> None:
     assert health_check()["service"] == "astrascope-backend"
+
+
+def test_main_uses_the_canonical_impact_module() -> None:
+    # Issue #88: main.py used to try the top-level `app` package first,
+    # so running pytest from backend/ loaded a second copy of the impact
+    # module and the tests' monkeypatches missed it — the endpoints hit
+    # live upstream data instead of the fakes. The canonical backend.app
+    # copy must be the one main uses, and no second copy may load.
+    import backend.app.api.impact as impact_api
+
+    assert main.impact_router is impact_api.router
+    assert "app.api.impact" not in sys.modules
+    assert "app.core.config" not in sys.modules
 
 
 def test_cors_origins_are_comma_separated() -> None:
@@ -691,6 +737,30 @@ def test_gp_normalization_null_fields_use_fallbacks_not_none_string() -> None:
     assert item["countryCode"] == "Unknown"
     assert item["orbitalDataUpdatedAt"] == ""
     assert "None" not in item["id"]
+
+
+def test_gp_normalization_treats_non_string_fields_as_absent() -> None:
+    # Same family as the null fallbacks above and issue #69: a dict
+    # OBJECT_NAME used to be str()-coerced into a satellite literally
+    # named "{'weird': 'dict'}", with a matching garbage slug id, and a
+    # list OBJECT_ID became "['x']". Non-string values are absent, not
+    # coerced, so the record keeps its fallbacks.
+    item = normalize({
+        "OBJECT_NAME": {"weird": "dict"},
+        "OBJECT_ID": ["x"],
+        "NORAD_CAT_ID": 25544,
+        "EPOCH": {"epoch": "2026-01-01"},
+        "COUNTRY_CODE": ["US"],
+        "MEAN_MOTION": 15.5,
+        "OBJECT_TYPE": "PAYLOAD",
+    })
+    assert item["name"] == "Unknown satellite"
+    assert item["objectId"] == "unknown"
+    assert item["epoch"] == ""
+    assert item["countryCode"] == "Unknown"
+    assert item["internationalDesignator"] is None
+    assert item["orbitalDataUpdatedAt"] == ""
+    assert item["id"] == "unknown-satellite-25544"
 
 
 def test_normalize_rejects_non_finite_and_garbage_floats() -> None:

@@ -132,12 +132,15 @@ def test_neo_normalization_tolerates_null_nested_objects() -> None:
     assert item.missDistanceKm is None
 
 
-def test_neo_normalization_falls_back_to_name_for_id() -> None:
+def test_neo_normalization_falls_back_to_name_and_date_for_id() -> None:
+    # Issue #104: an id-less object keeps a stable id built from its
+    # name and approach date, not the bare date other id-less objects
+    # on the same date would share.
     payload = neo_payload()
     del payload["id"]
     item = normalize_neo(payload)
     assert item is not None
-    assert item.id == "(2010 PK9)"
+    assert item.id == "(2010 PK9)-2026-08-08"
 
 
 class _FakeJsonResponse:
