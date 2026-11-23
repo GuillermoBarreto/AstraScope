@@ -96,6 +96,31 @@ def test_normalize_celestrak_satcat_with_provenance() -> None:
     assert item["dataSources"] == {"catalog": "celestrak-satcat"}
 
 
+def test_normalize_satcat_treats_non_string_fields_as_absent() -> None:
+    # Same family as the GP normalizer: a dict OBJECT_NAME used to be
+    # str()-coerced into a catalog entry literally named
+    # "{'weird': 'dict'}", and a list OWNER into "['US']". Non-string
+    # values are absent, not coerced, so the record keeps its fallbacks.
+    item = normalize_satcat(satcat_record(
+        OBJECT_NAME={"weird": "dict"},
+        OBJECT_ID=["1998-067A"],
+        OWNER=["US"],
+        LAUNCH_DATE={"date": "1998-11-20"},
+        LAUNCH_SITE=12345,
+        DECAY_DATE=["2020-01-01"],
+        DATA_STATUS_CODE={"code": "x"},
+    ))
+    assert item["name"] == "Unknown object"
+    assert item["internationalDesignator"] is None
+    assert item["countryCode"] is None
+    assert item["owner"] is None
+    assert item["launchDate"] is None
+    assert item["launchSite"] is None
+    assert item["decayDate"] is None
+    assert item["dataStatus"] is None
+    assert item["operationalStatus"] == "ACTIVE"
+
+
 def test_object_type_and_status_classification() -> None:
     assert object_type("PAY") == "PAYLOAD"
     assert object_type("R/B") == "ROCKET_BODY"

@@ -234,25 +234,29 @@ def normalize(entry: dict[str, Any], orbit_source: str = "celestrak-gp") -> dict
 
 def normalize_satcat(entry: dict[str, Any]) -> dict[str, Any]:
     norad_id = _gp_int(entry.get("NORAD_CAT_ID"))
-    name = str(entry.get("OBJECT_NAME") or "Unknown object").strip()
-    decay_date = str(entry.get("DECAY_DATE") or "").strip() or None
+    # Same stance as normalize() above: a dict/list in a string field
+    # used to be str()-coerced into a literal "{...}" name, owner, or
+    # launch site in the public catalog. A value of the wrong type is
+    # absent, not coerced.
+    name = (optional_str(entry.get("OBJECT_NAME")) or "Unknown object").strip()
+    decay_date = (optional_str(entry.get("DECAY_DATE")) or "").strip() or None
     status = operational_status(entry.get("OPS_STATUS_CODE"), decay_date)
     period = optional_float(entry.get("PERIOD"))
     mean_motion = 1440 / period if period and period > 0 else None
     catalog_type = object_type(entry.get("OBJECT_TYPE"))
-    data_status = str(entry.get("DATA_STATUS_CODE") or "").strip() or None
+    data_status = (optional_str(entry.get("DATA_STATUS_CODE")) or "").strip() or None
     return {
         "id": f"norad-{norad_id}",
         "noradId": norad_id,
         "name": name,
-        "internationalDesignator": str(entry.get("OBJECT_ID") or "").strip() or None,
+        "internationalDesignator": (optional_str(entry.get("OBJECT_ID")) or "").strip() or None,
         "objectType": catalog_type,
         "operationalStatus": status,
         "isActive": status == "ACTIVE",
-        "countryCode": str(entry.get("OWNER") or "").strip() or None,
-        "owner": str(entry.get("OWNER") or "").strip() or None,
-        "launchDate": str(entry.get("LAUNCH_DATE") or "").strip() or None,
-        "launchSite": str(entry.get("LAUNCH_SITE") or "").strip() or None,
+        "countryCode": (optional_str(entry.get("OWNER")) or "").strip() or None,
+        "owner": (optional_str(entry.get("OWNER")) or "").strip() or None,
+        "launchDate": (optional_str(entry.get("LAUNCH_DATE")) or "").strip() or None,
+        "launchSite": (optional_str(entry.get("LAUNCH_SITE")) or "").strip() or None,
         "decayDate": decay_date,
         "orbitalPeriodMinutes": period,
         "inclination": optional_float(entry.get("INCLINATION")),
