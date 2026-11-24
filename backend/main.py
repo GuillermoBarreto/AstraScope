@@ -396,14 +396,18 @@ def _valid_orbital_record(item: Any) -> bool:
 def _valid_catalog_record(item: Any) -> bool:
     """A SATCAT cache record the catalog endpoints can index: the
     filters and summary read noradId, name, objectType,
-    operationalStatus, and decayDate directly (issue #93)."""
+    operationalStatus, and decayDate directly (issue #93), and
+    catalog_object_detail spreads dataSources into a merged dict — a
+    hand-seeded record with a string (or list) dataSources passed
+    validation and 500ed that endpoint, so it must be a dict too."""
     return (isinstance(item, dict)
             and isinstance(item.get("noradId"), int)
             and not isinstance(item.get("noradId"), bool)
             and isinstance(item.get("name"), str)
             and "objectType" in item
             and "operationalStatus" in item
-            and "decayDate" in item)
+            and "decayDate" in item
+            and isinstance(item.get("dataSources"), dict))
 
 
 def read_disk_cache() -> tuple[list[dict[str, Any]], str, str] | None:
@@ -746,11 +750,14 @@ def _list_satellites_impl(
     if search:
         # Strip surrounding whitespace like filter_catalog_objects does:
         # a pasted " iss " found nothing here while /catalog/search
-        # matched it, and casefold matches the catalog filter too.
+        # matched it. Both sides casefold: the query was already
+        # casefolded, but the name side still used .lower(), so a name
+        # with a ß (or other casefold-only folding) never matched — e.g.
+        # searching "STRASSE" for a satellite named "Straße" (issue #106).
         query = search.casefold().strip()
         satellites = [
             item for item in satellites
-            if query in (item.get("name") or "").lower() or query in str(item.get("noradId"))
+            if query in (item.get("name") or "").casefold() or query in str(item.get("noradId"))
         ]
 
     return {
