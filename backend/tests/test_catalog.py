@@ -188,6 +188,25 @@ def test_satellites_search_ignores_surrounding_whitespace(monkeypatch) -> None:
     assert response["satellites"][0]["noradId"] == 25544
 
 
+def test_satellites_search_casefolds_names(monkeypatch) -> None:
+    # Issue #106: the query was casefolded but the name side used
+    # .lower(), so "STRASSE" never matched a satellite named "Straße"
+    # ("ß".casefold() == "ss", while "ß".lower() == "ß").
+    from datetime import datetime, timezone
+    fresh_stamp = datetime.now(timezone.utc).isoformat()
+    monkeypatch.setattr(
+        main, "read_disk_cache",
+        lambda: ([normalize_satcat(satcat_record(OBJECT_NAME="Straße-1"))],
+                 fresh_stamp, "celestrak"),
+    )
+    monkeypatch.setattr(main, "last_failure_at", 0.0)
+
+    response = main.list_satellites(operator=None, orbit=None, search="STRASSE")
+
+    assert response["total"] == 1
+    assert response["satellites"][0]["name"] == "Straße-1"
+
+
 def test_catalog_pagination_and_page_size_validation(monkeypatch) -> None:
     records = [normalize_satcat(satcat_record(NORAD_CAT_ID=str(1000 + index), OBJECT_NAME=f"OBJECT {index}")) for index in range(5)]
     monkeypatch.setattr(main, "public_catalog", lambda: (records, "2026-08-29T00:00:00Z", "cache", None))

@@ -746,11 +746,14 @@ def _list_satellites_impl(
     if search:
         # Strip surrounding whitespace like filter_catalog_objects does:
         # a pasted " iss " found nothing here while /catalog/search
-        # matched it, and casefold matches the catalog filter too.
+        # matched it. Both sides casefold: the query was already
+        # casefolded, but the name side still used .lower(), so a name
+        # with a ß (or other casefold-only folding) never matched — e.g.
+        # searching "STRASSE" for a satellite named "Straße" (issue #106).
         query = search.casefold().strip()
         satellites = [
             item for item in satellites
-            if query in (item.get("name") or "").lower() or query in str(item.get("noradId"))
+            if query in (item.get("name") or "").casefold() or query in str(item.get("noradId"))
         ]
 
     return {
