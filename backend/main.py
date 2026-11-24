@@ -396,14 +396,18 @@ def _valid_orbital_record(item: Any) -> bool:
 def _valid_catalog_record(item: Any) -> bool:
     """A SATCAT cache record the catalog endpoints can index: the
     filters and summary read noradId, name, objectType,
-    operationalStatus, and decayDate directly (issue #93)."""
+    operationalStatus, and decayDate directly (issue #93), and
+    catalog_object_detail spreads dataSources into a merged dict — a
+    hand-seeded record with a string (or list) dataSources passed
+    validation and 500ed that endpoint, so it must be a dict too."""
     return (isinstance(item, dict)
             and isinstance(item.get("noradId"), int)
             and not isinstance(item.get("noradId"), bool)
             and isinstance(item.get("name"), str)
             and "objectType" in item
             and "operationalStatus" in item
-            and "decayDate" in item)
+            and "decayDate" in item
+            and isinstance(item.get("dataSources"), dict))
 
 
 def read_disk_cache() -> tuple[list[dict[str, Any]], str, str] | None:
