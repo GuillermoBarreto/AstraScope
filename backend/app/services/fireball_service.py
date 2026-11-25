@@ -129,10 +129,19 @@ def _fetch_fireballs_cached(days: int, cache_window: int) -> list[Fireball]:
         # honest than reporting a successful sync with zero fireballs.
         raise ValueError("JPL Fireball API returned malformed data")
     try:
-        count = int(payload.get("count", 0))
-    except (TypeError, ValueError) as exc:
-        # A non-numeric count is malformed data, not a stray TypeError/ValueError
-        # escaping as an unhandled 500: keep it a structured upstream error.
+        raw_count = payload.get("count", 0)
+        # int(True) == 1, so a boolean count used to pass validation and
+        # report one event from a payload that never counted any. A bool
+        # is not a count (issue #109), the same way a bool is garbage in
+        # every other numeric field this codebase parses.
+        if isinstance(raw_count, bool):
+            raise ValueError("JPL Fireball API returned malformed data")
+        count = int(raw_count)
+    except (TypeError, ValueError, OverflowError) as exc:
+        # A non-numeric count is malformed data, not a stray error
+        # escaping as an unhandled 500: keep it a structured upstream
+        # error. A non-finite float count (inf) raises OverflowError on
+        # int(), not ValueError, so it needs the same treatment.
         raise ValueError("JPL Fireball API returned malformed data") from exc
     fields, rows = payload.get("fields"), payload.get("data")
     if not isinstance(fields, list) or not isinstance(rows, list):
