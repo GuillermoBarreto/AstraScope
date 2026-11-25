@@ -274,6 +274,23 @@ def test_identify_purpose_iss_needs_a_whole_word() -> None:
     assert identify_purpose("DISMISS") == "Other"
 
 
+def test_identify_purpose_gps_needs_a_whole_word() -> None:
+    # Issue #108: the substring check tagged "GPSAT-1" as Navigation
+    # ("GPS" inside "GPSAT"). Every pattern token must match as a whole
+    # word now, like ISS already did — hyphenated and spaced spellings
+    # still match, embedded ones don't.
+    assert identify_purpose("GPSAT-1") == "Other"
+    assert identify_purpose("GPS BIIR-5") == "Navigation"
+    assert identify_purpose("GPS IIF-1") == "Navigation"
+    assert identify_purpose("SES-1") == "Communications"
+    assert identify_purpose("O3B FM1") == "Communications"
+    assert identify_purpose("STARLINK-1234") == "Broadband"
+    assert identify_purpose("GOES-16") == "Weather"
+    assert identify_purpose("LANDSAT 8") == "Earth observation"
+    assert identify_purpose("CSS (TIANHE)") == "Crewed station"
+    assert identify_purpose("TIANHE") == "Crewed station"
+
+
 def test_curated_metadata_has_trusted_media_provenance() -> None:
     iss = curated_metadata("ISS (ZARYA)")
     assert iss["description"].startswith("The International Space Station")

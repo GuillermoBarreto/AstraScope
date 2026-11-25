@@ -180,6 +180,22 @@ def test_fireball_malformed_count_returns_structured_error(monkeypatch) -> None:
     assert body["error"]["code"] == "UPSTREAM_UNAVAILABLE"
 
 
+def test_fireball_boolean_count_returns_structured_error(monkeypatch) -> None:
+    # Issue #109: int(True) == 1, so a boolean JPL "count" used to pass
+    # validation and report one event from a payload that never counted
+    # any. A bool is not a count — it is malformed data like "many".
+    monkeypatch.setattr(
+        fireball_service,
+        "urlopen",
+        lambda *args, **kwargs: _FakeJsonResponse(json.dumps(_fireball_payload(True)).encode()),
+    )
+    fireball_service._fetch_fireballs_cached.cache_clear()
+    body = TestClient(app).get("/api/impact/fireballs?days=31").json()
+    assert body["fireballs"] == []
+    assert body["source"] == "unavailable"
+    assert body["error"]["code"] == "UPSTREAM_UNAVAILABLE"
+
+
 def test_fireball_zero_count_returns_empty_without_error(monkeypatch) -> None:
     monkeypatch.setattr(
         fireball_service,

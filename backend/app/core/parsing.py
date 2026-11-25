@@ -16,7 +16,11 @@ def optional_float(value: Any) -> float | None:
         return None
     try:
         result = float(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # A huge int (10**400) raises OverflowError on float(), not
+        # ValueError: an upstream field holding one used to fail the
+        # whole record instead of reading as "no data", like the NaN/inf
+        # and garbage-string cases already do.
         return None
     if result is not None and not math.isfinite(result):
         return None

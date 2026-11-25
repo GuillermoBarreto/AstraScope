@@ -143,8 +143,13 @@ def identify_purpose(name: str) -> str:
     # ISS must match as a whole word, like identify_operator does: the
     # substring check used to tag "MISSION-1" or "DISMISS" as a crewed
     # station (same false-positive family as curated_metadata, issue #45).
-    if "ISS" in set(re.split(r"[^A-Z0-9]+", upper)):
+    words = set(re.split(r"[^A-Z0-9]+", upper))
+    if "ISS" in words:
         return "Crewed station"
+    # Every other token matches as a whole word too: the substring check
+    # tagged "GPSAT-1" as Navigation ("GPS" inside "GPSAT", issue #108).
+    # A pattern like "SES-" or "CSS (TIANHE)" matches when all of its own
+    # words appear in the name; a single-word token matches one word.
     patterns = (
         ("Broadband", ("STARLINK", "ONEWEB", "KUIPER")),
         ("Navigation", ("GPS", "GLONASS", "GALILEO", "BEIDOU", "NAVSTAR")),
@@ -154,7 +159,13 @@ def identify_purpose(name: str) -> str:
         ("Communications", ("IRIDIUM", "GLOBALSTAR", "INTELSAT", "SES-", "O3B")),
         ("Crewed station", ("TIANHE", "CSS (TIANHE)")),
     )
-    return next((purpose for purpose, tokens in patterns if any(token in upper for token in tokens)), "Other")
+    for purpose, tokens in patterns:
+        for token in tokens:
+            token_words = set(re.split(r"[^A-Z0-9]+", token))
+            token_words.discard("")
+            if token_words and token_words <= words:
+                return purpose
+    return "Other"
 
 
 def _gp_float(value: Any) -> float:
