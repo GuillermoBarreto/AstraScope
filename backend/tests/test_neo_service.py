@@ -184,6 +184,10 @@ def test_optional_float_rejects_booleans() -> None:
     assert optional_float("") is None
     assert optional_float("nan") is None
     assert optional_float(float("inf")) is None
+    # A huge int raises OverflowError on float(), not ValueError: an
+    # upstream field holding one used to fail the whole record instead
+    # of reading as "no data".
+    assert optional_float(10 ** 400) is None
 
 
 def test_normalize_neo_treats_non_string_id_and_name_as_absent() -> None:
