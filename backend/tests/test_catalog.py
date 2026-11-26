@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import backend.main as main
-from backend.main import api_root, health_check, identify_operator, identify_purpose, normalize, normalize_satcat, normalize_satnogs, object_type, operational_status, orbit_class, tle_epoch, tle_object_id
+from backend.main import _gp_int, api_root, health_check, identify_operator, identify_purpose, normalize, normalize_satcat, normalize_satnogs, object_type, operational_status, orbit_class, tle_epoch, tle_object_id
 from backend.app.data.satellite_metadata import curated_metadata
 from backend.app.core.config import Settings
 
@@ -148,6 +148,27 @@ def test_gp_normalization_preserves_six_digit_norad_id_and_source() -> None:
     }, "space-track")
     assert item["noradId"] == 100123
     assert item["dataSources"]["orbit"] == "space-track"
+
+
+def test_gp_int_rejects_non_finite_float_ids() -> None:
+    # Issue #110: int(float("inf")) raises OverflowError, not ValueError,
+    # so a non-finite NORAD_CAT_ID used to drop the whole record instead
+    # of reading as "no data" (0), like the garbage-string case.
+    assert _gp_int(float("inf")) == 0
+    assert _gp_int(float("-inf")) == 0
+    assert _gp_int(float("nan")) == 0
+    assert _gp_int("ABC") == 0
+    assert _gp_int(True) == 0
+    assert _gp_int(100123) == 100123
+    item = normalize({
+        "OBJECT_NAME": "SARAMAGO",
+        "OBJECT_ID": "2026-999A",
+        "NORAD_CAT_ID": float("inf"),
+        "EPOCH": "2026-08-01T00:00:00Z",
+        "MEAN_MOTION": 15.1,
+        "OBJECT_TYPE": "PAYLOAD",
+    }, "space-track")
+    assert item["noradId"] == 0
 
 
 def test_metadata_without_current_elements_is_not_propagable() -> None:
