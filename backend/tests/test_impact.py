@@ -83,6 +83,10 @@ def test_upstream_failure_returns_structured_error(monkeypatch) -> None:
 def test_impact_parameter_validation() -> None:
     assert TestClient(app).get("/impact/neos?days=8").status_code == 422
     assert TestClient(app).get("/impact/fireballs?days=0").status_code == 422
+    # The fireballs window is capped at a year by the service, so the
+    # query bound must match it: a wider ask used to be accepted and
+    # silently served as 365 days of data.
+    assert TestClient(app).get("/impact/fireballs?days=366").status_code == 422
 
 
 def test_fireball_normalization_rejects_incomplete_rows() -> None:
