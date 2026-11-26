@@ -187,13 +187,15 @@ def _gp_int(value: Any) -> int:
     Same shape as _gp_float: normalize() called int() directly, so a
     provider-sent "ABC" NORAD_CAT_ID raised ValueError and dropped the
     whole record (issue #75). A non-numeric id means "no data", i.e. 0
-    here. Booleans are garbage like everywhere else, not 0/1.
+    here. Booleans are garbage like everywhere else, not 0/1. A
+    non-finite float id (inf) raises OverflowError on int(), not
+    ValueError, so it needs the same treatment (issue #110).
     """
     if isinstance(value, bool):
         return 0
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0
 
 

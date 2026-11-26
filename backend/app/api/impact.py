@@ -51,9 +51,12 @@ def neos(days: int = Query(7, ge=1, le=7), hazardous: bool = False, min_diameter
         return response("neos", [], "NASA/JPL NeoWs", GENERIC_UPSTREAM_MESSAGE)
 
 
+# The service caps the window at a year (MAX_FIREBALL_DAYS), so the
+# query bound must match it, like neos already matches MAX_NEOS_DAYS:
+# a wider ask used to be accepted and silently served as 365 days.
 @router.get("/impact/fireballs")
 @router.get("/api/impact/fireballs")
-def fireballs(days: int = Query(30, ge=1, le=3650), min_energy: float = Query(0, ge=0), has_coordinates: bool | None = None) -> dict[str, Any]:
+def fireballs(days: int = Query(30, ge=1, le=365), min_energy: float = Query(0, ge=0), has_coordinates: bool | None = None) -> dict[str, Any]:
     try:
         items = fetch_fireballs(days, int(time.time() // CACHE_SECONDS))
         if min_energy:
