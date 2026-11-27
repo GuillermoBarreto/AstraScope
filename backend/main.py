@@ -82,6 +82,11 @@ def identify_operator(name: str) -> str:
     upper = name.upper()
     if upper in {"ISS", "ISS (ZARYA)", "HST", "TERRA", "AQUA"}:
         return "NASA"
+    # Tokens match as whole words, like identify_purpose does: the
+    # substring check tagged "DOVETAIL-1" as Planet ("DOVE" inside
+    # "DOVETAIL") and "STARLINKED-1" as SpaceX (issue #113). A pattern
+    # like "SES-" matches when all of its own words appear in the name.
+    words = set(re.split(r"[^A-Z0-9]+", upper))
     patterns = (
         ("SpaceX", ("STARLINK",)),
         ("Eutelsat OneWeb", ("ONEWEB",)),
@@ -101,7 +106,13 @@ def identify_operator(name: str) -> str:
         ("AST SpaceMobile", ("BLUEWALKER", "BLUESAT")),
         ("China SatNet", ("QIANFAN", "GUOWANG")),
     )
-    return next((operator for operator, tokens in patterns if any(token in upper for token in tokens)), "Other")
+    for operator, tokens in patterns:
+        for token in tokens:
+            token_words = set(re.split(r"[^A-Z0-9]+", token))
+            token_words.discard("")
+            if token_words and token_words <= words:
+                return operator
+    return "Other"
 
 
 def orbit_class(mean_motion: float) -> str:

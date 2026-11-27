@@ -312,6 +312,24 @@ def test_identify_purpose_gps_needs_a_whole_word() -> None:
     assert identify_purpose("TIANHE") == "Crewed station"
 
 
+def test_identify_operator_needs_a_whole_word() -> None:
+    # Issue #113: the substring check tagged "DOVETAIL-1" as Planet
+    # ("DOVE" inside "DOVETAIL") and "STARLINKED-1" as SpaceX.
+    # Every pattern token must match as a whole word now, like
+    # identify_purpose already does — hyphenated and spaced spellings
+    # still match, embedded ones don't.
+    assert identify_operator("DOVETAIL-1") == "Other"
+    assert identify_operator("STARLINKED-1") == "Other"
+    assert identify_operator("STARLINK-1234") == "SpaceX"
+    assert identify_operator("FLOCK 4A-1") == "Planet"
+    assert identify_operator("DOVE-2") == "Planet"
+    assert identify_operator("SES-10") == "SES"
+    assert identify_operator("O3B FM1") == "SES"
+    assert identify_operator("GLOBALSTAR-1") == "Globalstar"
+    assert identify_operator("GLOBAL-1") == "BlackSky"
+    assert identify_operator("LEMUR-2") == "Spire"
+
+
 def test_curated_metadata_has_trusted_media_provenance() -> None:
     iss = curated_metadata("ISS (ZARYA)")
     assert iss["description"].startswith("The International Space Station")
