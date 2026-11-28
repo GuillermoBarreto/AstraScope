@@ -575,14 +575,19 @@ def fetch_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]:
         raise ValueError("CelesTrak returned an invalid catalog")
     # Skip malformed records individually: one bad record (e.g. a non-numeric
     # MEAN_MOTION) must not abort the whole sync and leave stale cache for all.
+    # A record with no usable NORAD id normalizes to noradId 0 and would be
+    # served under a colliding "slug-0" id: the SATCAT path already drops
+    # those (noradId > 0), so the orbital path does the same.
     satellites = []
     for item in payload:
         if not isinstance(item, dict):
             continue
         try:
-            satellites.append(normalize(item, "celestrak-gp"))
+            satellite = normalize(item, "celestrak-gp")
         except (ValueError, TypeError):
             continue
+        if satellite["noradId"] > 0:
+            satellites.append(satellite)
     if not satellites:
         raise ValueError("CelesTrak returned no valid orbital records")
     updated_at = datetime.now(timezone.utc).isoformat()
@@ -603,9 +608,14 @@ def fetch_satnogs_catalog(cache_window: int) -> tuple[list[dict[str, Any]], str]
         if not isinstance(item, dict):
             continue
         try:
-            satellites.append(normalize_satnogs(item))
+            satellite = normalize_satnogs(item)
         except (ValueError, TypeError):
             continue
+        # No usable NORAD id (uncatalogued TLE) normalizes to noradId 0
+        # and would be served under a colliding "slug-0" id — same rule
+        # as fetch_catalog above.
+        if satellite["noradId"] > 0:
+            satellites.append(satellite)
     if not satellites:
         raise ValueError("SatNOGS returned no valid orbital records")
     updated_at = datetime.now(timezone.utc).isoformat()
@@ -650,14 +660,18 @@ def fetch_spacetrack_catalog(cache_window: int) -> tuple[list[dict[str, Any]], s
     # Skip malformed records individually: one bad Space-Track record (e.g. a
     # non-numeric MEAN_MOTION) must not abort the whole sync and leave stale
     # cache for all (mirrors fetch_catalog and fetch_satnogs_catalog).
+    # A record with no usable NORAD id normalizes to noradId 0 and would be
+    # served under a colliding "slug-0" id — same rule as fetch_catalog.
     satellites = []
     for item in payload:
         if not isinstance(item, dict):
             continue
         try:
-            satellites.append(normalize(item, "space-track"))
+            satellite = normalize(item, "space-track")
         except (ValueError, TypeError):
             continue
+        if satellite["noradId"] > 0:
+            satellites.append(satellite)
     if not satellites:
         # Same rule as the CelesTrak and SatNOGS paths: an all-malformed
         # payload is not an empty catalog to cache and serve labeled

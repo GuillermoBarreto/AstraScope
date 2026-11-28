@@ -540,6 +540,45 @@ def test_fetch_catalog_rejects_non_list_payload(monkeypatch, tmp_path) -> None:
         main.fetch_catalog.cache_clear()
 
 
+def test_fetch_catalog_skips_records_without_norad_id(monkeypatch, tmp_path) -> None:
+    # A GP record with a garbage NORAD_CAT_ID normalizes to noradId 0 and
+    # used to be served under a colliding "slug-0" id; the SATCAT path
+    # already drops those (noradId > 0), so the orbital path does the same.
+    monkeypatch.setattr(main, "CACHE_FILE", tmp_path / "active-satellites.json")
+    main.fetch_catalog.cache_clear()
+
+    class FakeResponse:
+        def __init__(self, body: bytes):
+            self._body = body
+
+        def read(self) -> bytes:
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    good = {
+        "OBJECT_NAME": "ISS (ZARYA)",
+        "OBJECT_ID": "1998-067A",
+        "NORAD_CAT_ID": 25544,
+        "EPOCH": "2026-08-01T00:00:00Z",
+        "MEAN_MOTION": 15.5,
+        "OBJECT_TYPE": "PAYLOAD",
+    }
+    bad = dict(good, OBJECT_NAME="MYSTERY", NORAD_CAT_ID="not-a-number")
+    payload = json.dumps([good, bad]).encode()
+    monkeypatch.setattr(main, "urlopen", lambda *args, **kwargs: FakeResponse(payload))
+    monkeypatch.setattr(main, "write_disk_cache", lambda *args, **kwargs: None)
+    try:
+        satellites, _ = main.fetch_catalog(1)
+        assert [s["noradId"] for s in satellites] == [25544]
+    finally:
+        main.fetch_catalog.cache_clear()
+
+
 def test_catalog_object_detail_preserves_satcat_identity(monkeypatch) -> None:
     # A GP/orbital record carries no OPS_STATUS_CODE or OBJECT_TYPE columns,
     # so its normalize() defaults ("UNKNOWN" status, "PAYLOAD" type) must not
