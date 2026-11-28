@@ -410,11 +410,18 @@ def normalize_satnogs(entry: dict[str, Any]) -> dict[str, Any]:
 def _valid_orbital_record(item: Any) -> bool:
     """An orbital cache record the catalog endpoints can index: they
     read noradId and objectType directly (catalog_orbits, object
-    detail), so a record missing either 500s (issue #93)."""
+    detail), so a record missing either 500s (issue #93). The object
+    detail endpoint also spreads dataSources into a merged dict, so a
+    hand-seeded record with a string (or list) dataSources passed
+    validation and 500ed that endpoint — same class as the catalog-side
+    #93 fix. A missing dataSources is fine (the spread defaults to an
+    empty dict); a present-but-not-a-dict one is not."""
     return (isinstance(item, dict)
             and isinstance(item.get("noradId"), int)
             and not isinstance(item.get("noradId"), bool)
-            and "objectType" in item)
+            and "objectType" in item
+            and (item.get("dataSources") is None
+                 or isinstance(item.get("dataSources"), dict)))
 
 
 def _valid_catalog_record(item: Any) -> bool:

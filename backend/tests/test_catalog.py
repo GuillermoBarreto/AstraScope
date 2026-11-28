@@ -910,3 +910,26 @@ def test_disk_cache_rejects_records_missing_keys(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(main, "CACHE_FILE", cache_file)
     cache_file.write_text(json.dumps({"schemaVersion": main.CACHE_SCHEMA_VERSION, "satellites": [{"noradId": 25544}], "updatedAt": "2026-08-05T12:00:00+00:00", "upstream": "celestrak"}), encoding="utf-8")
     assert main.read_disk_cache() is None
+
+
+def test_disk_cache_rejects_non_dict_data_sources(tmp_path, monkeypatch) -> None:
+    # Same class as the public-catalog #93 fix: an orbital record with
+    # every indexed key but a string dataSources passed validation, then
+    # catalog_object_detail spread it ({**...}) and 500ed. It reads as a
+    # miss now, so the catalog re-syncs instead of serving a 500.
+    cache_file = tmp_path / "active-satellites.json"
+    monkeypatch.setattr(main, "CACHE_FILE", cache_file)
+    record = normalize({
+        "OBJECT_NAME": "SARAMAGO",
+        "OBJECT_ID": "2026-999A",
+        "NORAD_CAT_ID": 100123,
+        "EPOCH": "2026-08-01T00:00:00Z",
+        "MEAN_MOTION": 15.1,
+        "OBJECT_TYPE": "PAYLOAD",
+    }, "space-track")
+    record["dataSources"] = "space-track"
+    cache_file.write_text(json.dumps({"schemaVersion": main.CACHE_SCHEMA_VERSION, "satellites": [record], "updatedAt": "2026-08-05T12:00:00+00:00", "upstream": "spacetrack"}), encoding="utf-8")
+    assert main.read_disk_cache() is None
+    record["dataSources"] = {"orbit": "space-track"}
+    cache_file.write_text(json.dumps({"schemaVersion": main.CACHE_SCHEMA_VERSION, "satellites": [record], "updatedAt": "2026-08-05T12:00:00+00:00", "upstream": "spacetrack"}), encoding="utf-8")
+    assert main.read_disk_cache() is not None
