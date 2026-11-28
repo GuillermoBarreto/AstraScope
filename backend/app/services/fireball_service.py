@@ -73,7 +73,13 @@ def normalize_fireball(fields: list[str], row: list[Any]) -> Fireball | None:
     if longitude is not None and _direction(record.get("lon-dir")) == "W":
         longitude = -abs(longitude)
     components = [optional_float(record.get(key)) for key in ("vx", "vy", "vz")]
+    # The squares can overflow to inf when the components are huge but
+    # finite (1e200 each): sqrt(inf) is inf, and an inf velocity breaks
+    # strict JSON serialization of the whole feed. A non-finite velocity
+    # is no data, like the non-finite components optional_float rejects.
     velocity = math.sqrt(sum(value * value for value in components)) if all(value is not None for value in components) else None
+    if velocity is not None and not math.isfinite(velocity):
+        velocity = None
     location = f"{abs(latitude):.1f}° {'N' if latitude >= 0 else 'S'}, {abs(longitude):.1f}° {'E' if longitude >= 0 else 'W'}" if latitude is not None and longitude is not None else None
     # Build the id from the already-normalized date_time, not the raw
     # timestamp, and strip the timezone designator with the same shared

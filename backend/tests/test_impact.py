@@ -60,6 +60,18 @@ def test_fireball_normalization() -> None:
     assert item.velocityKmS == 5
 
 
+def test_fireball_normalization_treats_overflowing_velocity_as_no_data() -> None:
+    # Velocity components of 1e200 each are finite inputs, but their
+    # squares overflow to inf — and an inf velocity breaks strict JSON
+    # serialization of the whole feed. It reads as no velocity instead.
+    fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
+    item = normalize_fireball(fields, ["2026-08-01 01:02:03", "10", "N", "20", "E", "30", "2.5", "0.1", "1e200", "1e200", "1e200"])
+    assert item is not None
+    assert item.velocityKmS is None
+    assert item.latitude == 10
+    assert item.longitude == 20
+
+
 def test_fireball_normalization_signed_coordinates() -> None:
     fields = ["date", "lat", "lat-dir", "lon", "lon-dir", "alt", "energy", "impact-e", "vx", "vy", "vz"]
     # JPL sometimes returns already-signed values alongside the direction
